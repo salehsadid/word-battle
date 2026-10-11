@@ -1,0 +1,4 @@
+pygame>=2.6.0
+pytest>=8.0.0
+inflect>=7.5.0
+nltk>=3.9.0
