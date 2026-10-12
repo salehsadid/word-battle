@@ -56,3 +56,4 @@ desktop.ini
 # Logs and scratch
 *.log
 scratch/
+data/raw_words.txt
