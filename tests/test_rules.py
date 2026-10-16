@@ -94,15 +94,22 @@ def test_termination_reach_goal_score():
     assert s5.winner == 1
 
 
-def test_termination_move_limit():
+def test_termination_move_limit_is_per_player():
     validator = MockValidator()
     rules = GameRules()
+    # Each player gets 2 moves -> the match ends after 4 moves in total
     state = GameState(board_size=3, game_mode=MODE_MOVE_LIMIT, move_limit=2)
 
-    s1 = rules.apply_move(state, (0, 0, "A"), validator)
-    assert not s1.is_terminal
-    s2 = rules.apply_move(s1, (0, 1, "B"), validator)
-    assert s2.is_terminal
+    s = state
+    for i, move in enumerate([(0, 0, "A"), (0, 1, "B"), (0, 2, "C")]):
+        s = rules.apply_move(s, move, validator)
+        assert not s.is_terminal, f"ended early after move {i + 1}"
+    assert s.moves_made_by(1) == 2 and s.moves_made_by(2) == 1
+
+    s = rules.apply_move(s, (1, 0, "D"), validator)
+    assert s.is_terminal
+    assert s.winner == 0  # nobody scored -> draw
+    assert s.end_reason == "move limit reached"
 
 
 def test_apply_and_undo_inplace():

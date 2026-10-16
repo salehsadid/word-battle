@@ -20,6 +20,8 @@ class MatchResult:
     p2_cutoffs: int = 0
     p1_mcts_sims: int = 0
     p2_mcts_sims: int = 0
+    p1_moves: int = 0
+    p2_moves: int = 0
 
 
 @dataclass

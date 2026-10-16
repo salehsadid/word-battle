@@ -1,193 +1,180 @@
+"""Score cards, match info strip and the AI / last-move insight panel."""
+
+import time
 import pygame
-from typing import Dict, Any, Optional
+from typing import Any, Dict, List, Optional
 from wordgrid.game.state import GameState
-from wordgrid.ui.colors import (
-    COLOR_PANEL_BG,
-    COLOR_PANEL_BORDER,
-    COLOR_TEXT_PRIMARY,
-    COLOR_TEXT_MUTED,
-    COLOR_TEXT_DIM,
-    COLOR_P1,
-    COLOR_P2,
-    COLOR_HIGHLIGHT_WORD,
-    COLOR_LAST_MOVE,
-    COLOR_CARD_BG,
-    COLOR_CARD_BORDER,
-)
+from wordgrid.config import MODE_LABELS, MODE_REACH_GOAL_SCORE, MODE_MOVE_LIMIT
+from wordgrid.ui import colors as col
+from wordgrid.ui import theme
+from wordgrid.ui.controls import wrap_text
+
+POPUP_SECONDS = 1.6
+
+
+def cell_label(r: int, c: int) -> str:
+    """1-based, human friendly cell name."""
+    return f"row {r + 1}, col {c + 1}"
+
+
+def friendly_ai_text(stats: Dict[str, Any], name: str, opponent: str) -> str:
+    """Plain-language summary of an AI move."""
+    move = stats.get("selected_move")
+    if not move:
+        return f"{name} made a move."
+    r, c, ch = move
+    where = cell_label(r, c)
+    word = stats.get("word")
+    points = stats.get("immediate_score", 0)
+    denied = stats.get("denied_points", 0)
+    reply = stats.get("opponent_best_reply")
+    if word:
+        text = f"{name} played {ch} at {where}, making {word} for +{points}."
+    elif denied:
+        text = f"{name} placed {ch} at {where} to block a square worth up to +{denied}."
+    else:
+        text = f"{name} placed {ch} at {where}. No word this turn."
+    if "opponent_best_reply" in stats and "ends the match" not in stats.get("explanation", ""):
+        if reply:
+            text += f" {opponent} can answer with up to +{reply}."
+        else:
+            text += f" {opponent} has no scoring reply right now."
+    return text
+
+
+def ai_details_text(stats: Dict[str, Any]) -> str:
+    parts = [stats.get("algorithm", "AI"), f"{stats.get('elapsed_time', 0.0) * 1000:,.0f} ms"]
+    if "nodes_visited" in stats:
+        parts.append(f"{stats['nodes_visited']:,} positions")
+        if stats.get("cutoffs"):
+            parts.append(f"{stats['cutoffs']:,} pruned")
+    elif "simulations" in stats:
+        parts.append(f"{stats['simulations']:,} simulations")
+    if "win_probability" in stats:
+        parts.append(f"win estimate {stats['win_probability']:.0%}")
+    return "  ·  ".join(parts)
 
 
 class StatisticsPanel:
-    """Renders scores, current turn, move metrics, and AI search statistics."""
+    """Two player score cards with turn highlight, move counters and '+N' pop-ups."""
 
-    def __init__(
-        self,
-        rect: pygame.Rect,
-        title_font: pygame.font.Font,
-        font: pygame.font.Font,
-        small_font: pygame.font.Font,
-    ):
+    def __init__(self, rect: pygame.Rect, title_font=None, font=None, small_font=None):
         self.rect = rect
-        self.title_font = title_font
-        self.font = font
-        self.small_font = small_font
-        try:
-            self.score_font = pygame.font.SysFont("Segoe UI", 22, bold=True)
-        except Exception:
-            self.score_font = title_font
+        self.popups: List[Dict[str, Any]] = []
+
+    def add_score_popup(self, player: int, points: int) -> None:
+        self.popups = [p for p in self.popups if p["player"] != player]
+        self.popups.append({"player": player, "points": points, "t0": time.time()})
+
+    def clear(self) -> None:
+        self.popups.clear()
+
+    def _card(self, surface, rect, state: GameState, pid: int, name: str, role: str) -> None:
+        accent = col.player_color(pid)
+        active = state.current_player == pid and not state.is_terminal
+        winner = state.is_terminal and state.winner == pid
+        if active or winner:
+            theme.draw_card(surface, rect, fill=col.player_soft(pid), border=accent, width=2)
+        else:
+            theme.draw_card(surface, rect)
+
+        pygame.draw.rect(surface, accent, (rect.x, rect.y + 12, 5, rect.height - 24), border_radius=3)
+        x = rect.x + 20
+        status = "to move" if active else ("winner" if winner else "")
+        status_w = 0
+        if status:
+            sr_ = theme.draw_text(surface, status, theme.font(theme.SIZE_CAPTION, bold=True),
+                                  accent if active else col.AMBER, (rect.right - 14, rect.y + 16), "topright")
+            status_w = sr_.width + 10
+        theme.draw_text(surface, name, theme.serif(20), col.TEXT, (x, rect.y + 12),
+                        max_width=rect.width - 40 - status_w)
+        theme.draw_text(surface, role, theme.font(theme.SIZE_CAPTION), col.TEXT_MUTED, (x, rect.y + 40),
+                        max_width=rect.width - 34)
+
+        score = state.scores.get(pid, 0)
+        sr = theme.draw_text(surface, str(score), theme.font(40, bold=True), col.TEXT, (x - 2, rect.y + 60))
+        theme.draw_text(surface, "points", theme.font(theme.SIZE_CAPTION), col.TEXT_MUTED,
+                        (sr.right + 6, sr.bottom - 26))
+
+        moves = state.moves_made_by(pid)
+        moves_txt = f"{moves} of {state.move_limit} moves" if state.game_mode == MODE_MOVE_LIMIT else \
+            f"{moves} move{'s' if moves != 1 else ''}"
+        theme.draw_text(surface, moves_txt, theme.font(theme.SIZE_CAPTION), col.TEXT_MUTED,
+                        (rect.right - 14, sr.bottom - 26), "topright")
+
+        if state.game_mode == MODE_REACH_GOAL_SCORE and state.goal_score > 0:
+            bar = pygame.Rect(rect.x + 18, rect.bottom - 18, rect.width - 36, 6)
+            pygame.draw.rect(surface, col.SURFACE_SUNK, bar, border_radius=3)
+            frac = min(1.0, score / state.goal_score)
+            if frac > 0:
+                pygame.draw.rect(surface, accent, (bar.x, bar.y, max(6, int(bar.width * frac)), bar.height),
+                                 border_radius=3)
+
+        now = time.time()
+        for pop in self.popups:
+            age = now - pop["t0"]
+            if pop["player"] != pid or age > POPUP_SECONDS:
+                continue
+            surf = theme.font(theme.SIZE_TITLE, bold=True).render(f"+{pop['points']}", True, col.SUCCESS)
+            surf.set_alpha(max(0, int(255 * (1 - age / POPUP_SECONDS))))
+            surface.blit(surf, (sr.right + 56, sr.y + 4 - int(age * 12)))
+
+    def render(self, surface, state: GameState, names: Dict[int, str], roles: Dict[int, str]) -> None:
+        self.popups = [p for p in self.popups if time.time() - p["t0"] <= POPUP_SECONDS]
+        gap = 14
+        w = (self.rect.width - gap) // 2
+        for pid in (1, 2):
+            rect = pygame.Rect(self.rect.x + (pid - 1) * (w + gap), self.rect.y, w, self.rect.height)
+            self._card(surface, rect, state, pid, names[pid], roles[pid])
+
+
+def render_info_strip(surface, rect: pygame.Rect, state: GameState) -> None:
+    """Pills: termination rule, squares left, move number."""
+    mode = MODE_LABELS.get(state.game_mode, state.game_mode)
+    if state.game_mode == MODE_REACH_GOAL_SCORE:
+        mode = f"First to {state.goal_score} points"
+    elif state.game_mode == MODE_MOVE_LIMIT:
+        mode = f"{state.move_limit} moves each"
+    else:
+        mode = "Fill the board"
+    left = state.empty_cell_count
+    parts = [mode, f"{left} square{'s' if left != 1 else ''} left",
+             f"Move {state.move_count + (0 if state.is_terminal else 1)}"]
+    theme.draw_text(surface, "     ·     ".join(parts), theme.semibold(theme.SIZE_BODY), col.TEXT_MUTED,
+                    (rect.x + 4, rect.centery), "midleft")
+
+
+class InsightPanel:
+    """Explains the latest move: a friendly sentence, plus optional technical details."""
+
+    def __init__(self, rect: pygame.Rect):
+        self.rect = rect
 
     def render(
         self,
-        surface: pygame.Surface,
-        state: GameState,
-        p1_name: str,
-        p2_name: str,
-        ai_stats: Optional[Dict[str, Any]] = None,
-        ai_searching: bool = False,
+        surface,
+        title: str,
+        sentence: str,
+        details: Optional[str],
+        accent,
+        thinking: bool = False,
     ) -> None:
-        # Background & border
-        pygame.draw.rect(surface, COLOR_PANEL_BG, self.rect, border_radius=8)
-        pygame.draw.rect(surface, COLOR_PANEL_BORDER, self.rect, width=1, border_radius=8)
-
-        x = self.rect.x + 16
-        y = self.rect.y + 12
-
-        # Header: Game Over Banner or Match Status
-        if state.is_terminal:
-            banner_rect = pygame.Rect(x, y, self.rect.width - 32, 32)
-            p1_score = state.scores.get(1, 0)
-            p2_score = state.scores.get(2, 0)
-            if state.winner == 1:
-                winner_text = f"WINNER: {p1_name.upper()}! ({p1_score} - {p2_score})"
-                b_color = COLOR_P1
-                txt_color = COLOR_PANEL_BG
-            elif state.winner == 2:
-                winner_text = f"WINNER: {p2_name.upper()}! ({p2_score} - {p1_score})"
-                b_color = COLOR_P2
-                txt_color = COLOR_PANEL_BG
-            else:
-                winner_text = f"MATCH DRAW! ({p1_score} - {p2_score})"
-                b_color = COLOR_HIGHLIGHT_WORD
-                txt_color = COLOR_PANEL_BG
-
-            pygame.draw.rect(surface, b_color, banner_rect, border_radius=6)
-            txt_w = self.font.render(winner_text, True, txt_color)
-            surface.blit(txt_w, txt_w.get_rect(center=banner_rect.center))
-            y += 38
-        else:
-            title_surf = self.title_font.render("Match Status", True, COLOR_TEXT_PRIMARY)
-            surface.blit(title_surf, (x, y))
-
-            # Turn indicator badge on top right of header
-            turn_name = p1_name if state.current_player == 1 else p2_name
-            turn_color = COLOR_P1 if state.current_player == 1 else COLOR_P2
-            turn_badge = f"Turn: {turn_name}"
-            turn_surf = self.small_font.render(turn_badge, True, turn_color)
-            badge_r = pygame.Rect(
-                self.rect.right - 16 - turn_surf.get_width() - 14,
-                y + 3,
-                turn_surf.get_width() + 14,
-                22,
-            )
-            badge_bg = pygame.Color(12, 74, 110, 80) if state.current_player == 1 else pygame.Color(124, 45, 18, 80)
-            pygame.draw.rect(surface, badge_bg, badge_r, border_radius=11)
-            pygame.draw.rect(surface, turn_color, badge_r, width=1, border_radius=11)
-            surface.blit(turn_surf, (badge_r.x + 7, badge_r.y + 2))
-            y += 34
-
-        # Side-by-side Player Score Cards with generous breathing room
-        card_w = (self.rect.width - 32 - 12) // 2
-        card_h = 56
-
-        # Player 1 Card
-        p1_r = pygame.Rect(x, y, card_w, card_h)
-        is_p1_turn = (state.current_player == 1 and not state.is_terminal)
-        p1_bg = pygame.Color(12, 74, 110, 70) if is_p1_turn else COLOR_CARD_BG
-        p1_border = COLOR_P1 if is_p1_turn else COLOR_CARD_BORDER
-        pygame.draw.rect(surface, p1_bg, p1_r, border_radius=6)
-        pygame.draw.rect(surface, p1_border, p1_r, width=2 if is_p1_turn else 1, border_radius=6)
-
-        p1_title = f"P1: {p1_name}"
-        if len(p1_title) > 15:
-            p1_title = p1_title[:13] + ".."
-        surface.blit(self.small_font.render(p1_title, True, COLOR_P1), (p1_r.x + 10, p1_r.y + 6))
-        p1_score = f"{state.scores.get(1, 0)} pts"
-        surface.blit(self.score_font.render(p1_score, True, COLOR_TEXT_PRIMARY), (p1_r.x + 10, p1_r.y + 26))
-
-        # Player 2 Card
-        p2_r = pygame.Rect(x + card_w + 12, y, card_w, card_h)
-        is_p2_turn = (state.current_player == 2 and not state.is_terminal)
-        p2_bg = pygame.Color(124, 45, 18, 70) if is_p2_turn else COLOR_CARD_BG
-        p2_border = COLOR_P2 if is_p2_turn else COLOR_CARD_BORDER
-        pygame.draw.rect(surface, p2_bg, p2_r, border_radius=6)
-        pygame.draw.rect(surface, p2_border, p2_r, width=2 if is_p2_turn else 1, border_radius=6)
-
-        p2_title = f"P2: {p2_name}"
-        if len(p2_title) > 15:
-            p2_title = p2_title[:13] + ".."
-        surface.blit(self.small_font.render(p2_title, True, COLOR_P2), (p2_r.x + 10, p2_r.y + 6))
-        p2_score = f"{state.scores.get(2, 0)} pts"
-        surface.blit(self.score_font.render(p2_score, True, COLOR_TEXT_PRIMARY), (p2_r.x + 10, p2_r.y + 26))
-
-        y += card_h + 8
-
-        # Divider
-        pygame.draw.line(surface, COLOR_PANEL_BORDER, (x, y), (self.rect.right - 16, y))
-        y += 8
-
-        # Mode and Moves row
-        mode_text = f"Mode: {state.game_mode}  •  Move #{state.move_count}"
-        surface.blit(self.small_font.render(mode_text, True, COLOR_TEXT_MUTED), (x, y))
-        y += 18
-
-        # Last Move Info
-        if state.last_move:
-            lr, lc, lch = state.last_move
-            last_msg = f"Last Move: '{lch}' at ({lr}, {lc})"
-            if state.last_scored_words:
-                scored_strs = [f"{w} (+{l})" for w, l in state.last_scored_words]
-                last_msg += f"  ★ {', '.join(scored_strs)}"
-                surface.blit(self.small_font.render(last_msg, True, COLOR_HIGHLIGHT_WORD), (x, y))
-            elif getattr(state, "last_blocked_words", None):
-                blocked_str = ", ".join(f"'{w}'" for w in state.last_blocked_words)
-                last_msg += f"  • {blocked_str} already chosen (0 pts)"
-                surface.blit(self.small_font.render(last_msg, True, COLOR_LAST_MOVE), (x, y))
-            else:
-                surface.blit(self.small_font.render(last_msg, True, COLOR_TEXT_PRIMARY), (x, y))
-        else:
-            surface.blit(self.small_font.render("Last Move: None (Game starting)", True, COLOR_TEXT_MUTED), (x, y))
-        y += 20
-
-        # Divider
-        pygame.draw.line(surface, COLOR_PANEL_BORDER, (x, y), (self.rect.right - 16, y))
-        y += 10
-
-        # AI Search Metrics / Searching Indicator
-        if ai_searching:
-            cur_p = state.current_player
-            p_col = COLOR_P1 if cur_p == 1 else COLOR_P2
-            agent_name = p1_name if cur_p == 1 else p2_name
-            l1 = f"Calculating: {agent_name} is searching..."
-            surface.blit(self.small_font.render(l1, True, p_col), (x, y))
-            y += 16
-            surface.blit(self.small_font.render("Adversarial search in progress...", True, COLOR_TEXT_MUTED), (x, y))
-        elif ai_stats:
-            agent_type = ai_stats.get("agent", "AI")
-            time_ms = ai_stats.get("elapsed_time", 0.0) * 1000
-            l1 = f"AI Search: {agent_type} • {time_ms:.1f} ms"
-            surface.blit(self.small_font.render(l1, True, COLOR_TEXT_PRIMARY), (x, y))
-            y += 16
-
-            if "nodes_visited" in ai_stats:
-                nodes = ai_stats["nodes_visited"]
-                cutoffs = ai_stats.get("cutoffs", 0)
-                eval_val = ai_stats.get("best_score", 0.0)
-                l2 = f"Nodes: {nodes}  •  Cutoffs: {cutoffs}  •  Eval: {eval_val:+.2f}"
-                surface.blit(self.small_font.render(l2, True, COLOR_TEXT_MUTED), (x, y))
-            elif "simulations" in ai_stats:
-                sims = ai_stats["simulations"]
-                q_val = ai_stats.get("selected_move_q", 0.0)
-                l2 = f"Simulations: {sims}  •  Move Q: {q_val:.3f}"
-                surface.blit(self.small_font.render(l2, True, COLOR_TEXT_MUTED), (x, y))
-        else:
-            waiting_txt = "Waiting for next move..." if not state.is_terminal else "Match completed."
-            surface.blit(self.small_font.render(waiting_txt, True, COLOR_TEXT_MUTED), (x, y))
+        theme.draw_card(surface, self.rect)
+        x = self.rect.x + 18
+        y = self.rect.y + 14
+        pygame.draw.circle(surface, accent, (x + 5, y + 10), 5)
+        theme.draw_text(surface, title, theme.serif(19), col.TEXT, (x + 18, y - 2))
+        y += 30
+        body = theme.font(theme.SIZE_BODY)
+        width = self.rect.width - 36
+        if thinking:
+            dots = "." * (int(time.time() * 3) % 4)
+            theme.draw_text(surface, f"{sentence}{dots}", body, col.TEXT_MUTED, (x, y))
+            return
+        max_lines = 2 if details else 3
+        for line in wrap_text(body, sentence, width, max_lines=max_lines):
+            theme.draw_text(surface, line, body, col.TEXT, (x, y))
+            y += 21
+        if details:
+            y = self.rect.bottom - 24
+            theme.draw_text(surface, details, theme.font(theme.SIZE_CAPTION), col.TEXT_SUBTLE, (x, y), max_width=width)

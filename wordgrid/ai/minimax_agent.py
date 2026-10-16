@@ -2,13 +2,17 @@ import time
 from typing import Optional, Tuple, Dict, Any, List
 from wordgrid.game.state import GameState
 from wordgrid.game.rules import GameRules, Move
-from wordgrid.game.scoring import WordValidatorProtocol, ScoringSystem
+from wordgrid.game.scoring import WordValidatorProtocol
 from wordgrid.ai.base_agent import BaseAgent
 from wordgrid.ai.evaluation import HeuristicEvaluator
+from wordgrid.ai.move_ordering import MoveOrdering
 
 
 class MinimaxAgent(BaseAgent):
-    """Depth-limited Minimax Agent with heuristic evaluation."""
+    """Depth-limited plain Minimax (no pruning) with heuristic evaluation.
+
+    Kept as a reference implementation: AlphaBetaAgent must reach the same root value.
+    """
 
     def __init__(
         self,
@@ -16,13 +20,20 @@ class MinimaxAgent(BaseAgent):
         depth: int = 2,
         evaluator: Optional[HeuristicEvaluator] = None,
         candidate_k: int = 0,
+        rules: Optional[GameRules] = None,
     ):
-        super().__init__(name)
+        super().__init__(name, rules)
         self.depth = depth
         self.evaluator = evaluator or HeuristicEvaluator()
-        self.rules = GameRules(ScoringSystem())
+        self.evaluator.set_scoring(self.rules.scoring)
+        self.move_orderer = MoveOrdering(self.rules.scoring)
         self.candidate_k = candidate_k
         self.nodes_visited = 0
+
+    def bind_rules(self, rules: GameRules) -> None:
+        super().bind_rules(rules)
+        self.evaluator.set_scoring(rules.scoring)
+        self.move_orderer.set_scoring(rules.scoring)
 
     def select_move(self, state: GameState, validator: WordValidatorProtocol) -> Move:
         start_time = time.perf_counter()
@@ -49,6 +60,7 @@ class MinimaxAgent(BaseAgent):
 
         self.last_stats = {
             "agent": self.name,
+            "algorithm": "Minimax",
             "depth": self.depth,
             "nodes_visited": self.nodes_visited,
             "elapsed_time": elapsed_time,
@@ -71,6 +83,8 @@ class MinimaxAgent(BaseAgent):
             return self.evaluator.evaluate_heuristic(state, root_player, validator), None
 
         legal_moves = self.rules.get_legal_moves(state)
+        if self.candidate_k > 0:
+            legal_moves = self.move_orderer.order_moves(state, legal_moves, validator, top_k=self.candidate_k)
         if not legal_moves:
             return self.evaluator.evaluate_heuristic(state, root_player, validator), None
 

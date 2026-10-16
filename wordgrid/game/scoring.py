@@ -1,8 +1,39 @@
 from typing import List, Tuple, Set, Optional, Protocol
 from wordgrid.game.board import Board
 
-# Occurrence identity: (orientation: 'H'|'V', start_row, start_col, end_row, end_col)
+# Occurrence identity: (direction, start_row, start_col, end_row, end_col)
+# Direction is one of:
+#   "H"  - horizontal, read left-to-right   "HR" - horizontal, read right-to-left
+#   "V"  - vertical,   read top-to-bottom   "VR" - vertical,   read bottom-to-top
+# Coordinates are always stored top-left -> bottom-right regardless of reading direction.
 OccurrenceKey = Tuple[str, int, int, int, int]
+
+# Tie-break order among equally long words (lower index wins).
+DIRECTION_PRIORITY = {"H": 0, "HR": 1, "V": 2, "VR": 3}
+
+DIRECTION_LABELS = {
+    "H": "left-to-right",
+    "HR": "right-to-left",
+    "V": "top-to-bottom",
+    "VR": "bottom-to-top",
+}
+
+ScoredWord = Tuple[str, int, OccurrenceKey]
+
+
+def direction_label(key: Optional[OccurrenceKey]) -> str:
+    """Human readable reading direction for an occurrence key."""
+    if not key:
+        return "-"
+    return DIRECTION_LABELS.get(key[0], key[0])
+
+
+def occurrence_cells(key: OccurrenceKey) -> List[Tuple[int, int]]:
+    """Returns the board cells covered by an occurrence key."""
+    orient, r1, c1, r2, c2 = key
+    if orient.startswith("H"):
+        return [(r1, c) for c in range(c1, c2 + 1)]
+    return [(r, c1) for r in range(r1, r2 + 1)]
 
 
 class WordValidatorProtocol(Protocol):
@@ -13,14 +44,19 @@ class WordValidatorProtocol(Protocol):
 
 class ScoringSystem:
     """Authoritative scoring engine for WordGrid.
-    
-    Evaluates newly completed words formed by placing a letter at (row, col).
-    Ensures:
-      - Only contiguous horizontal (L-R) and vertical (T-B) words passing through (row, col) are checked.
-      - Words must meet the minimum word length and exist in the accepted dictionary.
-      - Each word occurrence scores at most once in its lifetime.
-      - When multiple eligible words form on a single move, the score awarded is max(lengths).
-      - All newly completed eligible word occurrences are recorded to prevent duplicate scoring.
+
+    Rules implemented:
+      - Only contiguous horizontal and vertical letter runs through the placed cell are examined.
+        Diagonals are never examined.
+      - Every contiguous sub-segment containing the placed cell is a candidate, read in both
+        directions (left-to-right, right-to-left, top-to-bottom, bottom-to-top).
+      - A candidate is eligible when it meets the minimum length, is in the dictionary and has
+        not already been scored earlier in the match (by either player).
+      - Only the single longest eligible word is selected and scored; shorter words formed by the
+        same move stay available for later moves.
+      - Ties between equally long words are broken deterministically by direction
+        (H, HR, V, VR), then by top-most / left-most start cell.
+      - The move earns points equal to the selected word's length, or 0 if nothing is eligible.
     """
 
     def __init__(self, min_word_length: int = 2):
@@ -30,39 +66,103 @@ class ScoringSystem:
         self, board: Board, row: int, col: int
     ) -> Tuple[Tuple[str, OccurrenceKey], Tuple[str, OccurrenceKey]]:
         """Finds the maximal contiguous horizontal and vertical letter sequences passing through (row, col).
-        
+
         Returns:
             ((h_word, h_occurrence_key), (v_word, v_occurrence_key))
         """
-        size = board.size
-
-        # 1. Horizontal sequence (same row)
-        left_col = col
-        while left_col - 1 >= 0 and board.get(row, left_col - 1) is not None:
-            left_col -= 1
-
-        right_col = col
-        while right_col + 1 < size and board.get(row, right_col + 1) is not None:
-            right_col += 1
-
-        h_letters = [board.get(row, c) for c in range(left_col, right_col + 1)]
-        h_word = "".join(h_letters)
+        left_col, right_col = self._horizontal_bounds(board, row, col)
+        h_word = "".join(board.grid[row][c] for c in range(left_col, right_col + 1))
         h_key: OccurrenceKey = ("H", row, left_col, row, right_col)
 
-        # 2. Vertical sequence (same col)
-        top_row = row
-        while top_row - 1 >= 0 and board.get(top_row - 1, col) is not None:
-            top_row -= 1
-
-        bottom_row = row
-        while bottom_row + 1 < size and board.get(bottom_row + 1, col) is not None:
-            bottom_row += 1
-
-        v_letters = [board.get(r, col) for r in range(top_row, bottom_row + 1)]
-        v_word = "".join(v_letters)
+        top_row, bottom_row = self._vertical_bounds(board, row, col)
+        v_word = "".join(board.grid[r][col] for r in range(top_row, bottom_row + 1))
         v_key: OccurrenceKey = ("V", top_row, col, bottom_row, col)
 
         return (h_word, h_key), (v_word, v_key)
+
+    @staticmethod
+    def _horizontal_bounds(board: Board, row: int, col: int) -> Tuple[int, int]:
+        grid = board.grid
+        left_col = col
+        while left_col - 1 >= 0 and grid[row][left_col - 1] is not None:
+            left_col -= 1
+        right_col = col
+        while right_col + 1 < board.size and grid[row][right_col + 1] is not None:
+            right_col += 1
+        return left_col, right_col
+
+    @staticmethod
+    def _vertical_bounds(board: Board, row: int, col: int) -> Tuple[int, int]:
+        grid = board.grid
+        top_row = row
+        while top_row - 1 >= 0 and grid[top_row - 1][col] is not None:
+            top_row -= 1
+        bottom_row = row
+        while bottom_row + 1 < board.size and grid[bottom_row + 1][col] is not None:
+            bottom_row += 1
+        return top_row, bottom_row
+
+    def _scan_run(
+        self,
+        run: List[str],
+        pos: int,
+        validator: WordValidatorProtocol,
+    ) -> List[Tuple[str, int, int, bool]]:
+        """Finds dictionary words in `run` that contain index `pos`, in both reading directions.
+
+        Returns a list of (word, start_idx, end_idx, reversed) with indices into `run`.
+        """
+        n = len(run)
+        found: List[Tuple[str, int, int, bool]] = []
+        if n < self.min_word_length:
+            return found
+        has_prefix = hasattr(validator, "is_valid_prefix")
+
+        for is_reversed in (False, True):
+            seq = run[::-1] if is_reversed else run
+            p = (n - 1 - pos) if is_reversed else pos
+            for i in range(p + 1):
+                word = "".join(seq[i:p])
+                for j in range(p, n):
+                    word += seq[j]
+                    if has_prefix and not validator.is_valid_prefix(word):
+                        break
+                    if len(word) >= self.min_word_length and validator.is_valid_word(word):
+                        if is_reversed:
+                            found.append((word, n - 1 - j, n - 1 - i, True))
+                        else:
+                            found.append((word, i, j, False))
+        return found
+
+    def find_candidates(
+        self,
+        board: Board,
+        row: int,
+        col: int,
+        validator: WordValidatorProtocol,
+    ) -> List[ScoredWord]:
+        """Every dictionary word (any direction) containing (row, col), ignoring match history."""
+        candidates: List[ScoredWord] = []
+
+        left_col, right_col = self._horizontal_bounds(board, row, col)
+        h_run = [board.grid[row][c] for c in range(left_col, right_col + 1)]
+        for word, s, e, rev in self._scan_run(h_run, col - left_col, validator):
+            key: OccurrenceKey = ("HR" if rev else "H", row, left_col + s, row, left_col + e)
+            candidates.append((word, len(word), key))
+
+        top_row, bottom_row = self._vertical_bounds(board, row, col)
+        v_run = [board.grid[r][col] for r in range(top_row, bottom_row + 1)]
+        for word, s, e, rev in self._scan_run(v_run, row - top_row, validator):
+            key = ("VR" if rev else "V", top_row + s, col, top_row + e, col)
+            candidates.append((word, len(word), key))
+
+        return candidates
+
+    @staticmethod
+    def selection_key(item: ScoredWord) -> Tuple[int, int, int, int]:
+        """Sort key implementing the documented tie-breaking rule (smaller sorts first)."""
+        word, length, key = item
+        return (-length, DIRECTION_PRIORITY.get(key[0], 9), key[1], key[2])
 
     def evaluate_move(
         self,
@@ -73,111 +173,29 @@ class ScoringSystem:
         scored_occurrences: Set[OccurrenceKey],
         scored_words: Optional[Set[str]] = None,
         blocked_collector: Optional[List[str]] = None,
-    ) -> Tuple[int, List[Tuple[str, int, OccurrenceKey]]]:
-        """Evaluates scoring for a move placed at (row, col).
-        
-        Checks in all 4 directions (Left, Right, Up, Down, and across) for valid words
-        passing through (row, col).
-        Rules:
-          - If a word was already chosen/scored previously in this match (in scored_words),
-            it cannot be chosen a second time and awards no points.
-          - In each direction (horizontal and vertical), the highest matched valid word is selected.
-          - Move score awards the maximum length among the highest matched eligible words.
-        
+    ) -> Tuple[int, List[ScoredWord]]:
+        """Evaluates scoring for a letter already placed at (row, col).
+
         Returns:
-            move_score: int, maximum length of eligible newly formed words (or 0).
-            newly_scored: list of (word, length, occurrence_key) for the scored words.
+            move_score: length of the selected word (or 0).
+            newly_scored: [] or a single-element list [(word, length, occurrence_key)].
         """
         if scored_words is None:
             scored_words = set()
 
-        size = board.size
+        eligible: List[ScoredWord] = []
+        for item in self.find_candidates(board, row, col, validator):
+            word, _, key = item
+            if word in scored_words:
+                if blocked_collector is not None and word not in blocked_collector:
+                    blocked_collector.append(word)
+                continue
+            if key in scored_occurrences:
+                continue
+            eligible.append(item)
 
-        # 1. Horizontal letter boundaries on row
-        left_col = col
-        while left_col - 1 >= 0 and board.get(row, left_col - 1) is not None:
-            left_col -= 1
-        right_col = col
-        while right_col + 1 < size and board.get(row, right_col + 1) is not None:
-            right_col += 1
-
-        # Check all contiguous horizontal subsegments passing through (row, col)
-        # Covers words formed:
-        #   - Left of (row, col): c_start < col, c_end == col
-        #   - Right of (row, col): c_start == col, c_end > col
-        #   - Across (row, col): c_start < col < c_end
-        eligible_h_words: List[Tuple[str, int, OccurrenceKey]] = []
-        for c_start in range(left_col, col + 1):
-            for c_end in range(col, right_col + 1):
-                length = c_end - c_start + 1
-                if length < self.min_word_length:
-                    continue
-                w_letters = [board.get(row, c) for c in range(c_start, c_end + 1)]
-                word = "".join(w_letters)
-                key: OccurrenceKey = ("H", row, c_start, row, c_end)
-
-                if word in scored_words:
-                    if blocked_collector is not None and word not in blocked_collector:
-                        blocked_collector.append(word)
-                    continue
-                if key in scored_occurrences:
-                    continue
-                if validator.is_valid_word(word):
-                    eligible_h_words.append((word, length, key))
-
-        # Best horizontal word: highest matched word length
-        best_h: Optional[Tuple[str, int, OccurrenceKey]] = None
-        if eligible_h_words:
-            eligible_h_words.sort(key=lambda x: (x[1], x[2][4] - x[2][2]), reverse=True)
-            best_h = eligible_h_words[0]
-
-        # 2. Vertical letter boundaries on col
-        top_row = row
-        while top_row - 1 >= 0 and board.get(top_row - 1, col) is not None:
-            top_row -= 1
-        bottom_row = row
-        while bottom_row + 1 < size and board.get(bottom_row + 1, col) is not None:
-            bottom_row += 1
-
-        # Check all contiguous vertical subsegments passing through (row, col)
-        # Covers words formed:
-        #   - Up (above) (row, col): r_start < row, r_end == row
-        #   - Down (below) (row, col): r_start == row, r_end > row
-        #   - Across (row, col): r_start < row < r_end
-        eligible_v_words: List[Tuple[str, int, OccurrenceKey]] = []
-        for r_start in range(top_row, row + 1):
-            for r_end in range(row, bottom_row + 1):
-                length = r_end - r_start + 1
-                if length < self.min_word_length:
-                    continue
-                w_letters = [board.get(r, col) for r in range(r_start, r_end + 1)]
-                word = "".join(w_letters)
-                key: OccurrenceKey = ("V", r_start, col, r_end, col)
-
-                if word in scored_words:
-                    if blocked_collector is not None and word not in blocked_collector:
-                        blocked_collector.append(word)
-                    continue
-                if key in scored_occurrences:
-                    continue
-                if validator.is_valid_word(word):
-                    eligible_v_words.append((word, length, key))
-
-        # Best vertical word: highest matched word length
-        best_v: Optional[Tuple[str, int, OccurrenceKey]] = None
-        if eligible_v_words:
-            eligible_v_words.sort(key=lambda x: (x[1], x[2][3] - x[2][1]), reverse=True)
-            best_v = eligible_v_words[0]
-
-        # 3. Combine results
-        eligible_new_words: List[Tuple[str, int, OccurrenceKey]] = []
-        if best_h:
-            eligible_new_words.append(best_h)
-        if best_v and (not best_h or best_v[0] != best_h[0]):
-            eligible_new_words.append(best_v)
-
-        if not eligible_new_words:
+        if not eligible:
             return 0, []
 
-        move_score = max(length for _, length, _ in eligible_new_words)
-        return move_score, eligible_new_words
+        best = min(eligible, key=self.selection_key)
+        return best[1], [best]

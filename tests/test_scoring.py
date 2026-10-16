@@ -139,17 +139,10 @@ def test_simultaneous_horizontal_and_vertical_words_score_max_length():
     board.set(2, 4, "E")
     score, words = scoring.evaluate_move(board, 2, 4, validator, scored_occurrences)
 
-    # Score awarded must be max(5, 4) = 5, not 5 + 4 = 9!
+    # Only the longest word counts: HOUSE (5), not 5 + 4 = 9.
     assert score == 5
-    assert len(words) == 2
-    word_texts = {w[0] for w in words}
-    assert word_texts == {"HOUSE", "TREE"}
-
-    # Both occurrences must be marked
-    for _, _, k in words:
-        scored_occurrences.add(k)
-    assert ("H", 2, 0, 2, 4) in scored_occurrences
-    assert ("V", 0, 4, 3, 4) in scored_occurrences
+    assert words == [("HOUSE", 5, ("H", 2, 0, 2, 4))]
+    # TREE did not earn points, so it is not consumed and stays available.
 
 
 def test_extending_valid_word_into_invalid_sequence_scores_zero():
@@ -288,9 +281,10 @@ def test_four_directions_checked_up_down_left_right():
     # Place 'A' at center (2, 2)
     board.set(2, 2, "A")
     score, words = scoring.evaluate_move(board, 2, 2, validator, scored_occurrences, scored_words)
-    # Both CAT (horizontal) and BAT (vertical) should be found
+    # Both CAT (horizontal) and BAT (vertical) are found; they tie at length 3, and the
+    # tie-break rule (horizontal before vertical) selects CAT as the single scored word.
+    candidates = {w for w, _, _ in scoring.find_candidates(board, 2, 2, validator)}
+    assert candidates == {"CAT", "BAT"}
     assert score == 3
-    assert len(words) == 2
-    word_set = {w[0] for w in words}
-    assert word_set == {"CAT", "BAT"}
+    assert words == [("CAT", 3, ("H", 2, 1, 2, 3))]
 

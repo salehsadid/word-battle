@@ -33,6 +33,8 @@ class GameState:
         last_scored_words: Optional[List[Tuple[str, int]]] = None,
         last_scored_occurrences: Optional[List[Tuple[str, int, OccurrenceKey]]] = None,
         last_blocked_words: Optional[List[str]] = None,
+        starting_player: Optional[int] = None,
+        end_reason: Optional[str] = None,
     ):
         self.board = board if board is not None else Board(size=board_size)
         self.current_player = current_player
@@ -55,6 +57,8 @@ class GameState:
             last_scored_occurrences[:] if last_scored_occurrences is not None else []
         )
         self.last_blocked_words = last_blocked_words[:] if last_blocked_words is not None else []
+        self.starting_player = starting_player if starting_player is not None else current_player
+        self.end_reason = end_reason  # Why the match ended (see rules.END_* constants)
 
     @property
     def opponent_player(self) -> int:
@@ -79,7 +83,18 @@ class GameState:
             last_scored_words=self.last_scored_words,
             last_scored_occurrences=self.last_scored_occurrences,
             last_blocked_words=self.last_blocked_words,
+            starting_player=self.starting_player,
+            end_reason=self.end_reason,
         )
+
+    def moves_made_by(self, player: int) -> int:
+        """Number of moves the given player has made so far (players strictly alternate)."""
+        first = (self.move_count + 1) // 2
+        return first if player == self.starting_player else self.move_count - first
+
+    @property
+    def empty_cell_count(self) -> int:
+        return sum(1 for row in self.board.grid for v in row if v is None)
 
     def get_score_difference(self, player: int) -> int:
         """Returns score difference from perspective of specified player."""

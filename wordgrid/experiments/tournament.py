@@ -27,6 +27,9 @@ class TournamentRunner:
     ) -> MatchResult:
         """Executes a full match between agent1 (as P1) and agent2 (as P2)."""
         state = self.engine.reset(self.config)
+        # Both agents simulate with the engine's authoritative rules
+        agent1.bind_rules(self.engine.rules)
+        agent2.bind_rules(self.engine.rules)
         p1_time = 0.0
         p2_time = 0.0
         p1_moves = 0
@@ -41,7 +44,8 @@ class TournamentRunner:
         match_start = time.perf_counter()
 
         while not self.engine.is_game_over:
-            current_agent = agent1 if self.engine.state.current_player == 1 else agent2
+            current_player = self.engine.state.current_player
+            current_agent = agent1 if current_player == 1 else agent2
 
             t0 = time.perf_counter()
             move = current_agent.select_move(self.engine.state, self.validator)
@@ -49,7 +53,7 @@ class TournamentRunner:
 
             stats = current_agent.get_last_stats()
 
-            if self.engine.state.current_player == 1:
+            if current_player == 1:
                 p1_time += elapsed
                 p1_moves += 1
                 p1_nodes += stats.get("nodes_visited", 0)
@@ -86,6 +90,8 @@ class TournamentRunner:
             p2_cutoffs=p2_cutoffs,
             p1_mcts_sims=p1_mcts_sims,
             p2_mcts_sims=p2_mcts_sims,
+            p1_moves=p1_moves,
+            p2_moves=p2_moves,
         )
 
     def run_tournament(
@@ -120,8 +126,8 @@ class TournamentRunner:
                     s1.matches_played += 1
                     s1.total_score += result.p1_score
                     s1.total_score_diff += (result.p1_score - result.p2_score)
-                    s1.total_time_seconds += (result.p1_avg_time_per_move * (result.total_moves // 2))
-                    s1.total_moves += (result.total_moves // 2)
+                    s1.total_time_seconds += result.p1_avg_time_per_move * result.p1_moves
+                    s1.total_moves += result.p1_moves
                     s1.total_nodes_visited += result.p1_nodes_visited
                     s1.total_cutoffs += result.p1_cutoffs
                     s1.total_mcts_sims += result.p1_mcts_sims
@@ -138,8 +144,8 @@ class TournamentRunner:
                     s2.matches_played += 1
                     s2.total_score += result.p2_score
                     s2.total_score_diff += (result.p2_score - result.p1_score)
-                    s2.total_time_seconds += (result.p2_avg_time_per_move * (result.total_moves // 2))
-                    s2.total_moves += (result.total_moves // 2)
+                    s2.total_time_seconds += result.p2_avg_time_per_move * result.p2_moves
+                    s2.total_moves += result.p2_moves
                     s2.total_nodes_visited += result.p2_nodes_visited
                     s2.total_cutoffs += result.p2_cutoffs
                     s2.total_mcts_sims += result.p2_mcts_sims

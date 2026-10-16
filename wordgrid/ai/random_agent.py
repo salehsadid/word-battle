@@ -10,10 +10,9 @@ from wordgrid.ai.base_agent import BaseAgent
 class RandomAgent(BaseAgent):
     """Baseline agent that chooses uniformly at random among all legal moves."""
 
-    def __init__(self, name: str = "Random", seed: Optional[int] = None):
-        super().__init__(name)
+    def __init__(self, name: str = "Random", seed: Optional[int] = None, rules: Optional[GameRules] = None):
+        super().__init__(name, rules)
         self.rng = random.Random(seed)
-        self.rules = GameRules()
 
     def set_seed(self, seed: Optional[int]) -> None:
         self.rng = random.Random(seed)
@@ -29,6 +28,8 @@ class RandomAgent(BaseAgent):
 
         self.last_stats = {
             "agent": self.name,
+            "algorithm": "Random",
+            "explanation": f"Picked uniformly at random among {len(legal_moves)} legal moves.",
             "legal_moves_count": len(legal_moves),
             "elapsed_time": elapsed_time,
             "selected_move": chosen_move,

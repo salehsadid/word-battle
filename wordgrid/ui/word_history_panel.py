@@ -1,30 +1,16 @@
 import time
 import pygame
 from dataclasses import dataclass, field
-from typing import Optional, List, Tuple
-from wordgrid.game.scoring import OccurrenceKey
-from wordgrid.ui.colors import (
-    COLOR_PANEL_BG,
-    COLOR_PANEL_BORDER,
-    COLOR_TEXT_PRIMARY,
-    COLOR_TEXT_MUTED,
-    COLOR_TEXT_DIM,
-    COLOR_P1,
-    COLOR_P1_BG,
-    COLOR_P2,
-    COLOR_P2_BG,
-    COLOR_HIGHLIGHT_WORD,
-    COLOR_LAST_MOVE,
-    COLOR_CARD_BG,
-    COLOR_CARD_BORDER,
-    COLOR_CARD_HOVER,
-    COLOR_BADGE_BG,
-)
+from typing import Optional, List, Tuple, Union
+from wordgrid.game.scoring import OccurrenceKey, direction_label
+from wordgrid.ui import colors as col
+from wordgrid.ui import theme
+from wordgrid.ui.controls import UnderlineTabs
 
 
 @dataclass
 class MatchedWordRecord:
-    """Represents a successfully formed and scored word occurrence in match history."""
+    """A scored word in the match history."""
     word: str
     length: int
     player: int  # 1 or 2
@@ -35,288 +21,211 @@ class MatchedWordRecord:
     timestamp: float = field(default_factory=time.time)
 
 
+@dataclass
+class MoveLogRecord:
+    """One entry of the full move log (zero-point moves included)."""
+    move_number: int
+    player: int
+    player_name: str
+    move: Tuple[int, int, str]
+    points: int
+    word: Optional[str] = None
+    occurrence_key: Optional[OccurrenceKey] = None
+    blocked_words: List[str] = field(default_factory=list)
+
+
+TAB_WORDS = "words"
+TAB_LOG = "log"
+
+Record = Union[MatchedWordRecord, MoveLogRecord]
+
+
 class WordHistoryPanel:
-    """Displays an interactive, scrollable history of all matched words alongside the player who made each move."""
+    """Scrollable match history with two tabs: scored words, and every move.
 
-    def __init__(
-        self,
-        rect: pygame.Rect,
-        title_font: pygame.font.Font,
-        font: pygame.font.Font,
-        small_font: pygame.font.Font,
-    ):
+    Hovering or clicking an entry highlights its word on the board.
+    """
+
+    WORD_ROW_H = 50
+    LOG_ROW_H = 32
+
+    def __init__(self, rect: pygame.Rect, title_font=None, font=None, small_font=None):
+        # Fonts are accepted for backwards compatibility; the theme provides typography.
         self.rect = rect
-        self.title_font = title_font
-        self.font = font
-        self.small_font = small_font
-
         self.items: List[MatchedWordRecord] = []
+        self.log_items: List[MoveLogRecord] = []
         self.scroll_y: float = 0.0
-        self.hovered_item: Optional[MatchedWordRecord] = None
-        self.selected_item: Optional[MatchedWordRecord] = None
+        self.hovered_item: Optional[Record] = None
+        self.selected_item: Optional[Record] = None
+        self._visible_rows: List[Tuple[pygame.Rect, Record]] = []
+        self.tabs = UnderlineTabs(pygame.Rect(rect.x + 12, rect.y + 50, rect.width - 24, 38),
+                                     ["Words", "All moves"], 0, on_change=self._on_tab)
 
-        self._visible_card_rects: List[Tuple[pygame.Rect, MatchedWordRecord]] = []
+    @property
+    def active_tab(self) -> str:
+        return TAB_WORDS if self.tabs.index == 0 else TAB_LOG
 
-    def add_match(
-        self,
-        word: str,
-        length: int,
-        player: int,
-        player_name: str,
-        move_number: int,
-        move: Tuple[int, int, str],
-        occurrence_key: Optional[OccurrenceKey] = None,
-    ) -> None:
-        """Adds a newly matched word to the history.
-        
-        Newest words are kept at index 0 so the most recent move is always visible at the top.
-        """
-        record = MatchedWordRecord(
-            word=word.upper(),
-            length=length,
-            player=player,
-            player_name=player_name,
-            move_number=move_number,
-            move=move,
-            occurrence_key=occurrence_key,
-        )
-        self.items.insert(0, record)
-        self.scroll_y = 0.0  # Reset to top so the latest match is in view
+    @active_tab.setter
+    def active_tab(self, tab: str) -> None:
+        self.tabs.index = 0 if tab == TAB_WORDS else 1
+        self._on_tab()
+
+    def _on_tab(self, *args) -> None:
+        self.scroll_y = 0.0
+        self.selected_item = None
+
+    # ------------------------------------------------------------------ data
+    def add_match(self, word: str, length: int, player: int, player_name: str, move_number: int,
+                  move: Tuple[int, int, str], occurrence_key: Optional[OccurrenceKey] = None) -> None:
+        """Adds a scored word (newest first)."""
+        self.items.insert(0, MatchedWordRecord(word.upper(), length, player, player_name, move_number, move,
+                                               occurrence_key))
+        if self.active_tab == TAB_WORDS:
+            self.scroll_y = 0.0
+
+    def add_move(self, move_number: int, player: int, player_name: str, move: Tuple[int, int, str], points: int,
+                 word: Optional[str] = None, occurrence_key: Optional[OccurrenceKey] = None,
+                 blocked_words: Optional[List[str]] = None) -> None:
+        """Adds a move to the move log (newest first)."""
+        self.log_items.insert(0, MoveLogRecord(move_number, player, player_name, move, points, word,
+                                               occurrence_key, list(blocked_words or [])))
+        if self.active_tab == TAB_LOG:
+            self.scroll_y = 0.0
 
     def clear(self) -> None:
-        """Resets the matched word history."""
         self.items.clear()
+        self.log_items.clear()
         self.scroll_y = 0.0
         self.hovered_item = None
         self.selected_item = None
-        self._visible_card_rects.clear()
+        self._visible_rows.clear()
 
+    @property
+    def highlight_key(self) -> Optional[Tuple[str, int, OccurrenceKey]]:
+        """Occurrence to highlight on the board (hovered entry first, then selected)."""
+        for item in (self.hovered_item, self.selected_item):
+            if item is not None and item.occurrence_key:
+                word = item.word or ""
+                return (word, len(word), item.occurrence_key)
+        return None
+
+    # ------------------------------------------------------------------ events
     def handle_event(self, event: pygame.event.Event) -> None:
-        """Handles scrolling and card selection events."""
-        mouse_pos = pygame.mouse.get_pos()
-
-        if event.type == pygame.MOUSEWHEEL:
-            if self.rect.collidepoint(mouse_pos):
-                self.scroll_y -= event.y * 36
-
-        elif event.type == pygame.MOUSEBUTTONDOWN:
-            if self.rect.collidepoint(event.pos):
-                # Mouse wheel buttons on older pygame versions
-                if event.button == 4:
-                    self.scroll_y -= 36
-                elif event.button == 5:
-                    self.scroll_y += 36
-                elif event.button == 1:
-                    # Check card click for board tile pinning
-                    clicked_record = None
-                    for card_r, record in self._visible_card_rects:
-                        if card_r.collidepoint(event.pos):
-                            clicked_record = record
-                            break
-
-                    if clicked_record:
-                        if self.selected_item == clicked_record:
-                            self.selected_item = None  # Toggle off
-                        else:
-                            self.selected_item = clicked_record
-                    else:
-                        # Clicked empty panel area
-                        self.selected_item = None
+        if self.tabs.handle_event(event):
+            return
+        if event.type == pygame.MOUSEWHEEL and self.rect.collidepoint(pygame.mouse.get_pos()):
+            self.scroll_y -= event.y * 40
+        elif event.type == pygame.MOUSEBUTTONDOWN and self.rect.collidepoint(event.pos):
+            if event.button == 1:
+                clicked = next((rec for r, rec in self._visible_rows if r.collidepoint(event.pos)), None)
+                self.selected_item = None if (clicked is None or clicked is self.selected_item) else clicked
+            elif event.button == 4:
+                self.scroll_y -= 40
+            elif event.button == 5:
+                self.scroll_y += 40
 
     def update(self) -> None:
-        """Updates hover states based on current mouse coordinates."""
-        mouse_pos = pygame.mouse.get_pos()
+        mouse = pygame.mouse.get_pos()
         self.hovered_item = None
-        if self.rect.collidepoint(mouse_pos):
-            for card_r, record in self._visible_card_rects:
-                if card_r.collidepoint(mouse_pos):
-                    self.hovered_item = record
-                    break
+        if self.rect.collidepoint(mouse):
+            self.hovered_item = next((rec for r, rec in self._visible_rows if r.collidepoint(mouse)), None)
+
+    # ------------------------------------------------------------------ render
+    def _row_background(self, surface, rect: pygame.Rect, item: Record) -> None:
+        if item is self.selected_item:
+            pygame.draw.rect(surface, col.SUCCESS_SOFT, rect, border_radius=8)
+            pygame.draw.rect(surface, col.SUCCESS, rect, width=1, border_radius=8)
+        elif item is self.hovered_item:
+            pygame.draw.rect(surface, col.SURFACE_ALT, rect, border_radius=8)
+
+    def _render_word(self, surface, rect: pygame.Rect, item: MatchedWordRecord) -> None:
+        self._row_background(surface, rect, item)
+        pygame.draw.circle(surface, col.player_color(item.player), (rect.x + 14, rect.y + 17), 5)
+        theme.draw_text(surface, item.word, theme.font(theme.SIZE_HEADING, bold=True), col.TEXT,
+                        (rect.x + 28, rect.y + 6))
+        r, c, ch = item.move
+        sub = f"Move {item.move_number}  ·  {item.player_name}  ·  {ch} at row {r + 1}, col {c + 1}  ·  " \
+              f"{direction_label(item.occurrence_key)}"
+        theme.draw_text(surface, sub, theme.font(12), col.TEXT_MUTED, (rect.x + 28, rect.y + 29),
+                        max_width=rect.width - 100)
+        pill = pygame.Rect(0, 0, 50, 26)
+        pill.midright = (rect.right - 8, rect.centery)
+        pygame.draw.rect(surface, col.SUCCESS_SOFT, pill, border_radius=13)
+        theme.draw_text(surface, f"+{item.length}", theme.font(theme.SIZE_BODY, bold=True), col.SUCCESS,
+                        pill.center, "center")
+
+    def _render_log(self, surface, rect: pygame.Rect, item: MoveLogRecord) -> None:
+        self._row_background(surface, rect, item)
+        cy = rect.centery
+        theme.draw_text(surface, str(item.move_number), theme.font(theme.SIZE_CAPTION), col.TEXT_SUBTLE,
+                        (rect.x + 22, cy), "center")
+        pygame.draw.circle(surface, col.player_color(item.player), (rect.x + 44, cy), 4)
+        theme.draw_text(surface, item.player_name, theme.font(theme.SIZE_CAPTION, bold=True), col.TEXT,
+                        (rect.x + 54, cy), "midleft", max_width=110)
+        r, c, ch = item.move
+        theme.draw_text(surface, f"{ch} at row {r + 1}, col {c + 1}", theme.font(theme.SIZE_CAPTION), col.TEXT_MUTED,
+                        (rect.x + 172, cy), "midleft")
+        if item.points > 0 and item.word:
+            result, color = f"{item.word}  +{item.points}", col.SUCCESS
+        elif item.blocked_words:
+            result, color = f"{item.blocked_words[0]} already used", col.TEXT_SUBTLE
+        else:
+            result, color = "no word", col.TEXT_SUBTLE
+        theme.draw_text(surface, result, theme.font(theme.SIZE_CAPTION, bold=item.points > 0), color,
+                        (rect.right - 10, cy), "midright", max_width=150)
 
     def render(self, surface: pygame.Surface) -> None:
-        """Renders the matched words history panel."""
         self.update()
+        theme.draw_card(surface, self.rect)
+        x = self.rect.x + 18
+        theme.draw_text(surface, "Match history", theme.serif(20), col.TEXT, (x, self.rect.y + 14))
+        total = sum(i.length for i in self.items)
+        theme.draw_text(surface, f"{len(self.items)} words  ·  {total} points", theme.font(theme.SIZE_CAPTION),
+                        col.TEXT_MUTED, (self.rect.right - 18, self.rect.y + 20), "topright")
+        self.tabs.options = [f"Words ({len(self.items)})", f"All moves ({len(self.log_items)})"]
+        self.tabs.render(surface)
 
-        # 1. Outer Container
-        pygame.draw.rect(surface, COLOR_PANEL_BG, self.rect, border_radius=8)
-        pygame.draw.rect(surface, COLOR_PANEL_BORDER, self.rect, width=1, border_radius=8)
+        content = pygame.Rect(self.rect.x + 10, self.rect.y + 98, self.rect.width - 20, self.rect.height - 108)
+        self._visible_rows.clear()
+        words_tab = self.active_tab == TAB_WORDS
+        records: List[Record] = list(self.items) if words_tab else list(self.log_items)
+        row_h = self.WORD_ROW_H if words_tab else self.LOG_ROW_H
 
-        # 2. Header
-        x = self.rect.x + 16
-        y = self.rect.y + 12
-
-        # Accent dot
-        pygame.draw.circle(surface, COLOR_HIGHLIGHT_WORD, (x + 4, y + 10), 4)
-
-        # Header Title
-        title_surf = self.font.render("Chosen Words History", True, COLOR_TEXT_PRIMARY)
-        surface.blit(title_surf, (x + 16, y))
-
-        # Total summary badge on top-right
-        count = len(self.items)
-        total_pts = sum(item.length for item in self.items)
-        if count > 0:
-            badge_text = f"{count} Locked • {total_pts} pts"
-            badge_color = COLOR_HIGHLIGHT_WORD
-        else:
-            badge_text = "0 Chosen"
-            badge_color = COLOR_TEXT_MUTED
-
-        badge_surf = self.small_font.render(badge_text, True, badge_color)
-        badge_rect = pygame.Rect(
-            self.rect.right - 16 - badge_surf.get_width() - 12,
-            y - 1,
-            badge_surf.get_width() + 12,
-            24,
-        )
-        pygame.draw.rect(surface, COLOR_BADGE_BG, badge_rect, border_radius=12)
-        pygame.draw.rect(surface, COLOR_PANEL_BORDER, badge_rect, width=1, border_radius=12)
-        surface.blit(badge_surf, (badge_rect.x + 6, badge_rect.y + 3))
-
-        y += 32
-        pygame.draw.line(surface, COLOR_PANEL_BORDER, (x, y), (self.rect.right - 16, y))
-        y += 8
-
-        # 3. Content Area
-        content_rect = pygame.Rect(
-            self.rect.x + 12,
-            y,
-            self.rect.width - 24,
-            self.rect.bottom - y - 12,
-        )
-
-        self._visible_card_rects.clear()
-
-        # Empty State
-        if not self.items:
-            empty_box = pygame.Rect(content_rect.x + 10, content_rect.y + 20, content_rect.width - 20, 100)
-            pygame.draw.rect(surface, COLOR_CARD_BG, empty_box, border_radius=6)
-            pygame.draw.rect(surface, COLOR_CARD_BORDER, empty_box, width=1, border_radius=6)
-
-            txt1 = self.font.render("No chosen words yet", True, COLOR_TEXT_MUTED)
-            txt2 = self.small_font.render("Words can only be chosen once per match.", True, COLOR_TEXT_DIM)
-            txt3 = self.small_font.render("Hover or click any word to inspect on the grid.", True, COLOR_TEXT_DIM)
-
-            surface.blit(txt1, txt1.get_rect(center=(empty_box.centerx, empty_box.y + 24)))
-            surface.blit(txt2, txt2.get_rect(center=(empty_box.centerx, empty_box.y + 52)))
-            surface.blit(txt3, txt3.get_rect(center=(empty_box.centerx, empty_box.y + 74)))
+        if not records:
+            msg = "Words you score will appear here." if words_tab else "Every move, including 0-point moves."
+            theme.draw_text(surface, "Nothing yet", theme.font(theme.SIZE_BODY, bold=True), col.TEXT_MUTED,
+                            (content.centerx, content.y + 40), "center")
+            theme.draw_text(surface, msg, theme.font(theme.SIZE_CAPTION), col.TEXT_SUBTLE,
+                            (content.centerx, content.y + 64), "center")
             return
 
-        # Scroll calculation
-        card_h = 56
-        gap = 6
-        item_stride = card_h + gap
-        total_height = len(self.items) * item_stride - gap
-        max_scroll = max(0, total_height - content_rect.height)
+        total_h = len(records) * row_h
+        max_scroll = max(0, total_h - content.height)
         self.scroll_y = max(0.0, min(self.scroll_y, float(max_scroll)))
+        has_bar = max_scroll > 0
+        row_w = content.width - (10 if has_bar else 0)
 
-        has_scrollbar = total_height > content_rect.height
-        card_w = content_rect.width - (14 if has_scrollbar else 0)
-
-        # Set clipping region to prevent card overflow
         old_clip = surface.get_clip()
-        surface.set_clip(content_rect)
-
+        surface.set_clip(content)
         try:
-            start_idx = max(0, int(self.scroll_y // item_stride))
-            end_idx = min(len(self.items), int((self.scroll_y + content_rect.height) // item_stride) + 2)
-
-            for idx in range(start_idx, end_idx):
-                item = self.items[idx]
-                item_y = content_rect.y + idx * item_stride - int(self.scroll_y)
-                card_r = pygame.Rect(content_rect.x, item_y, card_w, card_h)
-
-                if card_r.bottom < content_rect.top or card_r.top > content_rect.bottom:
-                    continue
-
-                self._visible_card_rects.append((card_r, item))
-
-                # Determine card styling
-                is_selected = (self.selected_item == item)
-                is_hovered = (self.hovered_item == item)
-
-                if is_selected:
-                    card_bg = pygame.Color(16, 185, 129, 45)
-                    card_border = COLOR_HIGHLIGHT_WORD
-                    border_w = 2
-                elif is_hovered:
-                    card_bg = COLOR_CARD_HOVER
-                    card_border = COLOR_HIGHLIGHT_WORD
-                    border_w = 1
+            first = int(self.scroll_y // row_h)
+            last = min(len(records), int((self.scroll_y + content.height) // row_h) + 2)
+            for idx in range(first, last):
+                rect = pygame.Rect(content.x, content.y + idx * row_h - int(self.scroll_y), row_w, row_h - 4)
+                item = records[idx]
+                self._visible_rows.append((rect, item))
+                if words_tab:
+                    self._render_word(surface, rect, item)
                 else:
-                    card_bg = COLOR_CARD_BG
-                    card_border = COLOR_CARD_BORDER
-                    border_w = 1
-
-                pygame.draw.rect(surface, card_bg, card_r, border_radius=6)
-                pygame.draw.rect(surface, card_border, card_r, width=border_w, border_radius=6)
-
-                # --- Card Contents ---
-                # A. Player Badge (Left)
-                is_p1 = (item.player == 1)
-                p_accent = COLOR_P1 if is_p1 else COLOR_P2
-                p_bg = COLOR_P1_BG if is_p1 else COLOR_P2_BG
-
-                badge_str = f"P{item.player}: {item.player_name}"
-                if len(badge_str) > 15:
-                    badge_str = badge_str[:13] + ".."
-                p_surf = self.small_font.render(badge_str, True, p_accent)
-
-                pill_r = pygame.Rect(card_r.x + 8, card_r.y + 6, p_surf.get_width() + 12, 20)
-                pygame.draw.rect(surface, p_bg, pill_r, border_radius=10)
-                pygame.draw.rect(surface, p_accent, pill_r, width=1, border_radius=10)
-                surface.blit(p_surf, (pill_r.x + 6, pill_r.y + 2))
-
-                # Move context below badge
-                r_pos, c_pos, l_ch = item.move
-                move_info = f"Move #{item.move_number} • ({r_pos}, {c_pos}) '{l_ch}'"
-                move_surf = self.small_font.render(move_info, True, COLOR_TEXT_MUTED)
-                surface.blit(move_surf, (card_r.x + 8, card_r.y + 32))
-
-                # C. Points Pill & Direction Tag (Right - measured first to center word)
-                score_str = f"+{item.length} pts"
-                score_surf = self.font.render(score_str, True, COLOR_LAST_MOVE)
-                score_x = card_r.right - 12 - score_surf.get_width()
-                surface.blit(score_surf, (score_x, card_r.y + 7))
-
-                orient_code = "Row (H)" if (not item.occurrence_key or item.occurrence_key[0] == "H") else "Col (V)"
-                orient_surf = self.small_font.render(orient_code, True, COLOR_TEXT_MUTED)
-                surface.blit(orient_surf, (card_r.right - 12 - orient_surf.get_width(), card_r.y + 32))
-
-                # B. Matched Word & Locked Badge (Center)
-                left_bound = pill_r.right + 10
-                right_bound = min(score_x, card_r.right - 12 - orient_surf.get_width()) - 10
-                center_x = (left_bound + right_bound) // 2
-
-                # If word with spaces fits in available space, use spaced format; otherwise compact
-                word_spaced = " ".join(item.word)
-                word_surf = self.font.render(word_spaced, True, COLOR_HIGHLIGHT_WORD)
-                if word_surf.get_width() > (right_bound - left_bound):
-                    word_surf = self.font.render(item.word, True, COLOR_HIGHLIGHT_WORD)
-
-                word_rect = word_surf.get_rect(center=(center_x, card_r.y + 17))
-                surface.blit(word_surf, word_rect)
-
-                lock_surf = self.small_font.render("[LOCKED]", True, COLOR_LAST_MOVE)
-                lock_rect = lock_surf.get_rect(center=(center_x, card_r.y + 37))
-                surface.blit(lock_surf, lock_rect)
-
+                    self._render_log(surface, rect, item)
+                if idx < len(records) - 1:
+                    pygame.draw.line(surface, col.SURFACE_ALT, (rect.x + 10, rect.bottom + 1),
+                                     (rect.right - 10, rect.bottom + 1))
         finally:
             surface.set_clip(old_clip)
 
-        # 4. Scrollbar Track & Thumb
-        if has_scrollbar:
-            sb_x = content_rect.right - 8
-            sb_y = content_rect.y
-            sb_w = 5
-            sb_h = content_rect.height
-
-            # Track
-            track_rect = pygame.Rect(sb_x, sb_y, sb_w, sb_h)
-            pygame.draw.rect(surface, COLOR_CARD_BG, track_rect, border_radius=2)
-
-            # Thumb
-            thumb_h = max(24, int(sb_h * (sb_h / total_height)))
-            thumb_y = sb_y + int((self.scroll_y / max_scroll) * (sb_h - thumb_h))
-            thumb_rect = pygame.Rect(sb_x, thumb_y, sb_w, thumb_h)
-            pygame.draw.rect(surface, COLOR_CARD_BORDER, thumb_rect, border_radius=2)
+        if has_bar:
+            track = pygame.Rect(content.right - 5, content.y, 4, content.height)
+            thumb_h = max(30, int(track.height * content.height / total_h))
+            thumb_y = track.y + int((self.scroll_y / max_scroll) * (track.height - thumb_h))
+            pygame.draw.rect(surface, col.BORDER_STRONG, (track.x, thumb_y, track.width, thumb_h), border_radius=2)

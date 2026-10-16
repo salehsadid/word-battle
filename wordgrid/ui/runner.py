@@ -1,31 +1,25 @@
-import os
-import sys
+import random
 import threading
 import pygame
-from typing import Optional, Dict, Any, List
-from wordgrid.config import UIConfig, GameConfig, DATA_DIR
+from pathlib import Path
+from typing import Optional, Dict
+from wordgrid.config import UIConfig, DATA_DIR, CLEANED_DICT_PATH
 from wordgrid.game.engine import GameEngine
 from wordgrid.dictionary.loader import DictionaryLoader
 from wordgrid.dictionary.word_validator import WordValidator
-from wordgrid.ai.base_agent import BaseAgent
 from wordgrid.ai.random_agent import RandomAgent
-from wordgrid.ai.minimax_agent import MinimaxAgent
 from wordgrid.ai.alphabeta_agent import AlphaBetaAgent
 from wordgrid.ai.mcts_agent import MCTSAgent
+from wordgrid.ai.evaluation import HeuristicEvaluator
+from wordgrid.config import DIFFICULTY_PRESETS, HeuristicWeights
 from wordgrid.experiments.tournament import TournamentRunner
 from wordgrid.experiments.results_export import ResultsExporter
+from wordgrid.settings import MatchSettings
 from wordgrid.ui.menu import MenuScreen
 from wordgrid.ui.game_screen import GameScreen
 from wordgrid.ui.controls import Button
-from wordgrid.ui.colors import (
-    COLOR_BG_DARK,
-    COLOR_PANEL_BG,
-    COLOR_PANEL_BORDER,
-    COLOR_TEXT_PRIMARY,
-    COLOR_TEXT_MUTED,
-    COLOR_P1,
-    COLOR_HIGHLIGHT_WORD,
-)
+from wordgrid.ui import colors as col
+from wordgrid.ui import theme
 
 
 class UIRunner:
@@ -34,25 +28,29 @@ class UIRunner:
     def __init__(self, config: Optional[UIConfig] = None):
         self.config = config or UIConfig()
         pygame.init()
-        pygame.display.set_caption("WordBattle — Adversarial Word Construction")
+        pygame.display.set_caption("WordBattle - Strategic Word Grid")
 
-        self.screen = pygame.display.set_mode((self.config.window_width, self.config.window_height))
+        size = (self.config.window_width, self.config.window_height)
+        try:
+            # SCALED keeps the logical 1100x760 layout and maps mouse input when resized.
+            self.screen = pygame.display.set_mode(size, pygame.SCALED | pygame.RESIZABLE)
+        except pygame.error:
+            self.screen = pygame.display.set_mode(size)
         self.clock = pygame.time.Clock()
 
-        # Initialize fonts
+        # Fonts (screens mostly use theme.font directly)
+        self.title_font = theme.font(theme.SIZE_TITLE, bold=True)
+        self.font = theme.font(theme.SIZE_BODY, bold=True)
+        self.small_font = theme.font(theme.SIZE_CAPTION)
         try:
-            self.title_font = pygame.font.SysFont("Segoe UI", 26, bold=True)
-            self.font = pygame.font.SysFont("Segoe UI", 18, bold=True)
-            self.small_font = pygame.font.SysFont("Segoe UI", 14)
-            self.mono_font = pygame.font.SysFont("Consolas", 14)
+            self.mono_font = pygame.font.SysFont("Consolas", 15)
         except Exception:
-            self.title_font = pygame.font.Font(None, 32)
-            self.font = pygame.font.Font(None, 24)
-            self.small_font = pygame.font.Font(None, 18)
-            self.mono_font = pygame.font.Font(None, 18)
+            self.mono_font = pygame.font.Font(None, 20)
 
-        # Load dictionary
-        self.validator, self.dict_stats = DictionaryLoader.load_dictionary()
+        # Dictionaries are loaded lazily and cached by path
+        self._validators: Dict[Path, WordValidator] = {}
+        self.validator = self._get_validator(CLEANED_DICT_PATH)
+        self.status_message: Optional[str] = None
 
         # Navigation State
         self.current_screen_name = "MENU"
@@ -64,48 +62,46 @@ class UIRunner:
             small_font=self.small_font,
         )
         self.game_screen: Optional[GameScreen] = None
+        self.last_settings: Optional[MatchSettings] = None
 
         # Tournament state
         self.tournament_running = False
+        self.tournament_progress = ""
         self.tournament_summary_text: Optional[str] = None
+        self.tournament_error: Optional[str] = None
         self.btn_tourney_back = Button(
-            rect=pygame.Rect(50, 680, 160, 40),
-            text="Back to Menu",
-            font=self.font,
+            rect=pygame.Rect(60, 680, 200, 46),
+            text="Back to settings",
+            icon="back",
             callback=self.return_to_menu,
         )
 
-    def _create_agent(self, agent_name: str, depth: int, mcts_sims: int) -> Optional[BaseAgent]:
-        name_lower = agent_name.lower()
-        if "alpha" in name_lower:
-            return AlphaBetaAgent(depth=depth)
-        elif "mini" in name_lower:
-            return MinimaxAgent(depth=depth)
-        elif "mcts" in name_lower:
-            return MCTSAgent(simulations=mcts_sims)
-        elif "random" in name_lower:
-            return RandomAgent()
-        return None  # Human
+    def _get_validator(self, path: Path) -> WordValidator:
+        path = Path(path)
+        if path not in self._validators:
+            if path == CLEANED_DICT_PATH:
+                validator, _ = DictionaryLoader.load_dictionary()
+            else:
+                validator, _ = DictionaryLoader.load_dictionary(dict_path=path)
+            self._validators[path] = validator
+        return self._validators[path]
 
-    def start_match(self, settings: dict):
-        g_config = GameConfig(
-            board_size=settings["board_size"],
-            game_mode=settings["game_mode"],
-            goal_score=settings["goal_score"],
-            move_limit=settings["move_limit"],
-        )
-        engine = GameEngine(validator=self.validator, config=g_config)
+    # ------------------------------------------------------------------ matches
+    def start_match(self, settings: MatchSettings):
+        try:
+            validator = self._get_validator(settings.dictionary_path)
+        except Exception as ex:  # unreadable dictionary
+            self.menu_screen.errors = [f"Could not load dictionary: {ex}"]
+            return
+        if len(validator) == 0:
+            self.menu_screen.errors = ["The selected dictionary contains no words."]
+            return
 
-        p1_agent = self._create_agent(settings["p1_agent"], settings["search_depth"], settings["mcts_sims"])
-        p2_agent = self._create_agent(settings["p2_agent"], settings["search_depth"], settings["mcts_sims"])
-
+        self.last_settings = settings
         self.game_screen = GameScreen(
-            engine=engine,
-            validator=self.validator,
-            p1_agent=p1_agent,
-            p2_agent=p2_agent,
-            p1_name=settings["p1_agent"],
-            p2_name=settings["p2_agent"],
+            settings=settings,
+            validator=validator,
+            build_engine=self._build_engine,
             title_font=self.title_font,
             font=self.font,
             small_font=self.small_font,
@@ -113,48 +109,80 @@ class UIRunner:
         )
         self.current_screen_name = "GAME"
 
-    def start_tournament(self, settings: dict):
+    def _build_engine(self, settings: MatchSettings, validator: WordValidator, rng: random.Random):
+        """Creates a fresh engine and agents for a (re)started match."""
+        start = settings.resolve_starting_player(rng)
+        engine = GameEngine(validator=validator, config=settings.game_config(start))
+        agents = {pid: settings.create_agent(pid, engine.rules) for pid in (1, 2)}
+        return engine, agents
+
+    # ------------------------------------------------------------------ tournament
+    def start_tournament(self, settings: MatchSettings):
         self.current_screen_name = "TOURNAMENT"
         self.tournament_running = True
         self.tournament_summary_text = None
+        self.tournament_error = None
+        self.tournament_progress = "Preparing agents..."
 
-        d_val = settings["search_depth"]
-        s_val = settings["mcts_sims"]
-        b_size = settings["board_size"]
-        mode = settings["game_mode"]
+        validator = self._get_validator(settings.dictionary_path)
+        g_config = settings.game_config(1)
+        seed = settings.seed if settings.seed is not None else 42
+        difficulty = "Medium"
 
         def _worker():
             try:
-                g_config = GameConfig(board_size=b_size, game_mode=mode)
-                runner = TournamentRunner(validator=self.validator, config=g_config)
+                runner = TournamentRunner(validator=validator, config=g_config)
+                mm = DIFFICULTY_PRESETS[difficulty]["minimax"]
+                mc = DIFFICULTY_PRESETS[difficulty]["mcts"]
                 agents = [
-                    RandomAgent("Random", seed=42),
-                    MinimaxAgent("Minimax", depth=d_val),
-                    AlphaBetaAgent("AlphaBeta", depth=d_val),
-                    MCTSAgent("MCTS", simulations=s_val, seed=42),
+                    RandomAgent("Random", seed=seed),
+                    AlphaBetaAgent(
+                        "Minimax",
+                        depth=mm["depth"],
+                        candidate_k=mm["candidate_k"],
+                        evaluator=HeuristicEvaluator(HeuristicWeights(**vars(settings.weights))),
+                        explain=False,
+                    ),
+                    MCTSAgent(
+                        "MCTS",
+                        simulations=mc["iterations"],
+                        c_param=settings.mcts_c,
+                        max_children=mc["max_children"],
+                        max_rollout_depth=mc["rollout_depth"],
+                        seed=seed,
+                        explain=False,
+                    ),
                 ]
+                self.tournament_progress = (
+                    f"Round robin on {g_config.board_size}x{g_config.board_size}, "
+                    f"{difficulty} presets, 2 games per pairing..."
+                )
                 matches, stats = runner.run_tournament(agents, games_per_pairing=2)
 
-                # Export
                 out_dir = DATA_DIR / "tournament_results"
                 ResultsExporter.export_to_json(matches, stats, out_dir / "results.json")
                 ResultsExporter.export_to_csv(stats, out_dir / "results.csv")
                 self.tournament_summary_text = ResultsExporter.format_summary_table(stats)
+            except Exception as ex:
+                self.tournament_error = f"Tournament failed: {ex}"
             finally:
                 self.tournament_running = False
 
         threading.Thread(target=_worker, daemon=True).start()
 
     def return_to_menu(self):
+        if self.game_screen is not None:
+            self.game_screen.shutdown()
         self.current_screen_name = "MENU"
         self.game_screen = None
+        self.menu_screen._refresh()
 
+    # ------------------------------------------------------------------ loop
     def run(self):
         running = True
         while running:
             self.clock.tick(self.config.fps)
 
-            # Event Handling
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
@@ -165,45 +193,53 @@ class UIRunner:
                 elif self.current_screen_name == "TOURNAMENT":
                     self.btn_tourney_back.handle_event(event)
 
-            # Update logic
             if self.current_screen_name == "MENU":
                 self.menu_screen.update()
-            elif self.current_screen_name == "GAME" and self.game_screen:
-                self.game_screen.update()
-
-            # Render logic
-            if self.current_screen_name == "MENU":
                 self.menu_screen.render(self.screen)
             elif self.current_screen_name == "GAME" and self.game_screen:
+                self.game_screen.update()
                 self.game_screen.render(self.screen)
             elif self.current_screen_name == "TOURNAMENT":
                 self._render_tournament_screen()
 
             pygame.display.flip()
 
+        if self.game_screen is not None:
+            self.game_screen.shutdown()
         pygame.quit()
 
     def _render_tournament_screen(self):
-        self.screen.fill(COLOR_BG_DARK)
-        title = self.title_font.render("AI Tournament & Benchmark Results", True, COLOR_P1)
-        self.screen.blit(title, (50, 40))
+        self.screen.fill(col.BG)
+        theme.draw_text(self.screen, "AI benchmark", theme.font(theme.SIZE_DISPLAY, bold=True), col.TEXT, (60, 40))
+        theme.draw_text(self.screen, "Random, Strategist (Minimax) and Explorer (MCTS) play each other twice, "
+                                     "alternating who starts.", theme.font(theme.SIZE_BODY), col.TEXT_MUTED, (60, 88))
+        card = pygame.Rect(60, 130, 980, 520)
+        theme.draw_card(self.screen, card, radius=16)
 
         if self.tournament_running:
-            prog_txt = self.font.render("Running tournament matches in background... Please wait.", True, COLOR_TEXT_PRIMARY)
-            self.screen.blit(prog_txt, (50, 100))
+            dots = "." * (pygame.time.get_ticks() // 400 % 4)
+            theme.draw_text(self.screen, f"Playing matches{dots}", theme.font(theme.SIZE_TITLE, bold=True),
+                            col.TEXT, (card.x + 32, card.y + 32))
+            theme.draw_text(self.screen, self.tournament_progress, theme.font(theme.SIZE_BODY), col.TEXT_MUTED,
+                            (card.x + 32, card.y + 70))
+            bar = pygame.Rect(card.x + 32, card.y + 110, card.width - 64, 8)
+            pygame.draw.rect(self.screen, col.SURFACE_SUNK, bar, border_radius=4)
+            span = bar.width // 4
+            off = (pygame.time.get_ticks() // 4) % (bar.width + span) - span
+            seg = pygame.Rect(bar.x + max(0, off), bar.y, min(span, bar.right - bar.x - max(0, off)), bar.height)
+            if seg.width > 0:
+                pygame.draw.rect(self.screen, col.PRIMARY, seg, border_radius=4)
+        elif self.tournament_error:
+            theme.draw_text(self.screen, self.tournament_error, theme.font(theme.SIZE_BODY, bold=True), col.DANGER,
+                            (card.x + 32, card.y + 32))
         elif self.tournament_summary_text:
-            y = 90
-            lines = self.tournament_summary_text.splitlines()
-            for line in lines:
-                l_surf = self.mono_font.render(line, True, COLOR_TEXT_PRIMARY)
-                self.screen.blit(l_surf, (50, y))
-                y += 24
-
-            msg = self.small_font.render(
-                "Results exported successfully to data/tournament_results/ (results.json, results.csv)",
-                True,
-                COLOR_HIGHLIGHT_WORD,
-            )
-            self.screen.blit(msg, (50, y + 20))
+            theme.draw_text(self.screen, "Results", theme.font(theme.SIZE_TITLE, bold=True), col.TEXT,
+                            (card.x + 32, card.y + 28))
+            y = card.y + 72
+            for line in self.tournament_summary_text.splitlines():
+                self.screen.blit(self.mono_font.render(line, True, col.TEXT), (card.x + 32, y))
+                y += 26
+            theme.draw_text(self.screen, "Saved to data/tournament_results/ (results.json, results.csv)",
+                            theme.font(theme.SIZE_CAPTION), col.SUCCESS, (card.x + 32, y + 16))
 
         self.btn_tourney_back.render(self.screen)

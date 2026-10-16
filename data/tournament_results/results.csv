@@ -1,5 +1,4 @@
 name,matches_played,wins,losses,draws,win_rate,avg_score,avg_score_diff,avg_move_time_seconds,total_nodes_visited,total_cutoffs,total_mcts_simulations
-Random,6,0,5,1,0.0,0.67,-20.0,0.0,0,0,0
-Minimax,6,5,1,0,0.8333,33.5,19.5,0.0098,25425,0,0
-AlphaBeta,6,5,1,0,0.8333,33.5,19.83,0.0114,25425,0,0
-MCTS,6,1,4,1,0.1667,2.17,-19.33,0.0481,0,0,7500
+Random,4,0,4,0,0.0,3.75,-27.5,0.0,0,0,0
+Minimax,4,3,0,1,0.75,35.25,15.25,0.0103,2031,388,0
+MCTS,4,2,1,1,0.5,31.0,12.25,0.2724,0,0,15000
