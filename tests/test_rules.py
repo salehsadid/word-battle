@@ -119,3 +119,34 @@ def test_apply_and_undo_inplace():
     assert state.board.is_empty(0, 0)
     assert state.current_player == 1
     assert state.move_count == 0
+
+
+def test_rules_forbids_repeated_word_and_tracks_last_blocked_words():
+    validator = MockValidator(["CAT"])
+    rules = GameRules()
+    s0 = GameState(board_size=5, current_player=1)
+
+    # P1 forms CAT at row 0
+    s1 = rules.apply_move(s0, (0, 0, "C"), validator)
+    s2 = rules.apply_move(s1, (4, 4, "Z"), validator)  # P2 dummy
+    s3 = rules.apply_move(s2, (0, 1, "A"), validator)
+    s4 = rules.apply_move(s3, (4, 3, "Z"), validator)  # P2 dummy
+    s5 = rules.apply_move(s4, (0, 2, "T"), validator)  # P1 completes CAT (+3)
+
+    assert s5.scores[1] == 3
+    assert "CAT" in s5.scored_words
+    assert s5.last_scored_words == [("CAT", 3)]
+    assert s5.last_blocked_words == []
+
+    # Now P2 forms CAT at row 2
+    s6 = rules.apply_move(s5, (2, 0, "C"), validator)
+    s7 = rules.apply_move(s6, (4, 2, "Z"), validator)  # P1 dummy
+    s8 = rules.apply_move(s7, (2, 1, "A"), validator)
+    s9 = rules.apply_move(s8, (4, 1, "Z"), validator)  # P1 dummy
+    s10 = rules.apply_move(s9, (2, 2, "T"), validator)  # P2 completes CAT again
+
+    # P2 must NOT receive points because CAT has already been chosen in this match!
+    assert s10.scores[2] == 0
+    assert s10.last_scored_words == []
+    assert "CAT" in s10.last_blocked_words
+

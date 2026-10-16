@@ -71,13 +71,15 @@ class OptionSelector:
         initial_index: int,
         font: pygame.font.Font,
         small_font: pygame.font.Font,
+        on_change: Optional[Callable[[int, str], None]] = None,
     ):
         self.rect = rect
         self.label = label
         self.options = options
-        self.index = initial_index % len(options)
+        self.index = initial_index % len(options) if options else 0
         self.font = font
         self.small_font = small_font
+        self.on_change = on_change
 
         # Left / Right navigation buttons
         btn_w = 32
@@ -86,21 +88,54 @@ class OptionSelector:
 
     @property
     def selected_value(self) -> str:
-        return self.options[self.index]
+        if 0 <= self.index < len(self.options):
+            return self.options[self.index]
+        return ""
+
+    def set_index(self, index: int, notify: bool = True) -> None:
+        if self.options:
+            self.index = index % len(self.options)
+            if notify and self.on_change:
+                self.on_change(self.index, self.selected_value)
+
+    def set_value(self, value: str, notify: bool = True) -> bool:
+        if value in self.options:
+            self.index = self.options.index(value)
+            if notify and self.on_change:
+                self.on_change(self.index, self.selected_value)
+            return True
+        return False
 
     def handle_event(self, event: pygame.event.Event) -> bool:
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             if self.left_rect.collidepoint(event.pos):
                 self.index = (self.index - 1) % len(self.options)
+                if self.on_change:
+                    self.on_change(self.index, self.selected_value)
                 return True
             elif self.right_rect.collidepoint(event.pos):
                 self.index = (self.index + 1) % len(self.options)
+                if self.on_change:
+                    self.on_change(self.index, self.selected_value)
+                return True
+            elif self.rect.collidepoint(event.pos):
+                # Clicking the selector card advances or steps
+                if event.pos[0] < self.rect.centerx:
+                    self.index = (self.index - 1) % len(self.options)
+                else:
+                    self.index = (self.index + 1) % len(self.options)
+                if self.on_change:
+                    self.on_change(self.index, self.selected_value)
                 return True
         return False
 
     def render(self, surface: pygame.Surface) -> None:
+        mouse_pos = pygame.mouse.get_pos()
+        is_hover = self.rect.collidepoint(mouse_pos)
+        bg = COLOR_BTN_HOVER if is_hover else COLOR_BTN_DEFAULT
+
         # Background
-        pygame.draw.rect(surface, COLOR_BTN_DEFAULT, self.rect, border_radius=6)
+        pygame.draw.rect(surface, bg, self.rect, border_radius=6)
         pygame.draw.rect(surface, COLOR_PANEL_BORDER, self.rect, width=1, border_radius=6)
 
         # Label
@@ -112,7 +147,6 @@ class OptionSelector:
         surface.blit(val_surf, (self.rect.x + 12, self.rect.y + 24))
 
         # Arrow buttons
-        mouse_pos = pygame.mouse.get_pos()
         l_color = COLOR_BTN_HOVER if self.left_rect.collidepoint(mouse_pos) else COLOR_BTN_DEFAULT
         r_color = COLOR_BTN_HOVER if self.right_rect.collidepoint(mouse_pos) else COLOR_BTN_DEFAULT
 

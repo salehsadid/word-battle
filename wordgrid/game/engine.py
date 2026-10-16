@@ -25,6 +25,7 @@ class GameEngine:
         self.config = config or GameConfig()
         self.rules = rules or GameRules(scoring_system=ScoringSystem(self.config.min_word_length))
         self.history: List[GameState] = []
+        self.matched_words: List[dict] = []
         self.state = self._create_initial_state()
 
     def _create_initial_state(self) -> GameState:
@@ -42,6 +43,7 @@ class GameEngine:
             self.config = config
             self.rules = GameRules(scoring_system=ScoringSystem(self.config.min_word_length))
         self.history.clear()
+        self.matched_words.clear()
         self.state = self._create_initial_state()
         return self.state
 
@@ -52,9 +54,23 @@ class GameEngine:
 
         # Save snapshot to history
         self.history.append(self.state.clone())
+        prev_player = self.state.current_player
 
         # Apply move via rules
         self.state = self.rules.apply_move(self.state, move, self.validator)
+
+        # Record matched words
+        for item in getattr(self.state, "last_scored_occurrences", []):
+            word, length, occ = item
+            self.matched_words.append({
+                "word": word,
+                "length": length,
+                "player": prev_player,
+                "move_count": self.state.move_count,
+                "move": move,
+                "occurrence": occ,
+            })
+
         return self.state
 
     def undo_last_move(self) -> Optional[GameState]:
@@ -62,6 +78,9 @@ class GameEngine:
         if not self.history:
             return None
         self.state = self.history.pop()
+        self.matched_words = [
+            m for m in self.matched_words if m["move_count"] <= self.state.move_count
+        ]
         return self.state
 
     def get_legal_moves(self) -> List[Move]:

@@ -99,17 +99,21 @@ class GameRules:
         next_state.board.set(r, c, ch)
 
         # Evaluate scoring
+        blocked_words: List[str] = []
         move_score, new_words = self.scoring.evaluate_move(
             next_state.board,
             r,
             c,
             validator,
             next_state.scored_occurrences,
+            next_state.scored_words,
+            blocked_collector=blocked_words,
         )
 
-        # Update scored occurrences
-        for _, _, occ_key in new_words:
+        # Update scored occurrences and chosen words
+        for word, _, occ_key in new_words:
             next_state.scored_occurrences.add(occ_key)
+            next_state.scored_words.add(word)
 
         # Award points to current player
         current_p = next_state.current_player
@@ -119,6 +123,8 @@ class GameRules:
         next_state.move_count += 1
         next_state.last_move = (r, c, ch)
         next_state.last_scored_words = [(word, length) for word, length, _ in new_words]
+        next_state.last_scored_occurrences = new_words[:]
+        next_state.last_blocked_words = blocked_words if not new_words else []
 
         # Check termination
         term, winner = self.check_termination(next_state)
@@ -145,22 +151,28 @@ class GameRules:
         ch = ch.upper()
         state.board.set(r, c, ch)
 
+        blocked_words: List[str] = []
         move_score, new_words = self.scoring.evaluate_move(
             state.board,
             r,
             c,
             validator,
             state.scored_occurrences,
+            state.scored_words,
+            blocked_collector=blocked_words,
         )
 
-        for _, _, occ_key in new_words:
+        for word, _, occ_key in new_words:
             state.scored_occurrences.add(occ_key)
+            state.scored_words.add(word)
 
         prev_player = state.current_player
         state.scores[prev_player] += move_score
         state.move_count += 1
         state.last_move = (r, c, ch)
         state.last_scored_words = [(w, l) for w, l, _ in new_words]
+        state.last_scored_occurrences = new_words[:]
+        state.last_blocked_words = blocked_words if not new_words else []
 
         term, winner = self.check_termination(state)
         state.is_terminal = term
@@ -185,8 +197,9 @@ class GameRules:
         r, c, _ = move
         state.board.clear_cell(r, c)
 
-        for _, _, occ_key in new_words:
+        for word, _, occ_key in new_words:
             state.scored_occurrences.discard(occ_key)
+            state.scored_words.discard(word)
 
         state.scores[prev_player] -= move_score
         state.move_count -= 1
@@ -195,3 +208,4 @@ class GameRules:
         state.winner = None
         state.last_move = prev_last_move
         state.last_scored_words = prev_last_scored
+        state.last_blocked_words = []

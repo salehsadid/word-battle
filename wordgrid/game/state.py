@@ -22,6 +22,7 @@ class GameState:
         current_player: int = 1,
         scores: Optional[Dict[int, int]] = None,
         scored_occurrences: Optional[Set[OccurrenceKey]] = None,
+        scored_words: Optional[Set[str]] = None,
         move_count: int = 0,
         game_mode: str = MODE_UNTIL_BOARD_FULL,
         goal_score: int = 30,
@@ -30,12 +31,17 @@ class GameState:
         winner: Optional[int] = None,
         last_move: Optional[Tuple[int, int, str]] = None,
         last_scored_words: Optional[List[Tuple[str, int]]] = None,
+        last_scored_occurrences: Optional[List[Tuple[str, int, OccurrenceKey]]] = None,
+        last_blocked_words: Optional[List[str]] = None,
     ):
         self.board = board if board is not None else Board(size=board_size)
         self.current_player = current_player
         self.scores: Dict[int, int] = scores.copy() if scores is not None else {1: 0, 2: 0}
         self.scored_occurrences: Set[OccurrenceKey] = (
             scored_occurrences.copy() if scored_occurrences is not None else set()
+        )
+        self.scored_words: Set[str] = (
+            scored_words.copy() if scored_words is not None else set()
         )
         self.move_count = move_count
         self.game_mode = game_mode
@@ -45,6 +51,10 @@ class GameState:
         self.winner = winner  # 1, 2, 0 (draw), or None if game in progress
         self.last_move = last_move
         self.last_scored_words = last_scored_words[:] if last_scored_words is not None else []
+        self.last_scored_occurrences = (
+            last_scored_occurrences[:] if last_scored_occurrences is not None else []
+        )
+        self.last_blocked_words = last_blocked_words[:] if last_blocked_words is not None else []
 
     @property
     def opponent_player(self) -> int:
@@ -58,6 +68,7 @@ class GameState:
             current_player=self.current_player,
             scores=self.scores,
             scored_occurrences=self.scored_occurrences,
+            scored_words=self.scored_words,
             move_count=self.move_count,
             game_mode=self.game_mode,
             goal_score=self.goal_score,
@@ -66,6 +77,8 @@ class GameState:
             winner=self.winner,
             last_move=self.last_move,
             last_scored_words=self.last_scored_words,
+            last_scored_occurrences=self.last_scored_occurrences,
+            last_blocked_words=self.last_blocked_words,
         )
 
     def get_score_difference(self, player: int) -> int:

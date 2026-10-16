@@ -34,15 +34,15 @@ class MoveOrdering:
         # Simulate placement temporarily to check newly completed words and prefixes
         board.set(r, c, ch)
         try:
-            (h_word, h_key), (v_word, v_key) = self.scoring.inspect_sequences(board, r, c)
-            move_score = 0
-            if len(h_word) >= self.scoring.min_word_length and h_key not in state.scored_occurrences:
-                if validator.is_valid_word(h_word):
-                    move_score = max(move_score, len(h_word))
-
-            if len(v_word) >= self.scoring.min_word_length and v_key not in state.scored_occurrences:
-                if validator.is_valid_word(v_word):
-                    move_score = max(move_score, len(v_word))
+            move_score, _ = self.scoring.evaluate_move(
+                board,
+                r,
+                c,
+                validator,
+                state.scored_occurrences,
+                state.scored_words,
+            )
+            (h_word, _), (v_word, _) = self.scoring.inspect_sequences(board, r, c)
 
             prefix_bonus = 0.0
             if validator.is_valid_prefix(h_word):

@@ -189,7 +189,12 @@ class MCTSAgent(BaseAgent):
             state.board.set(r, c, ch)
             try:
                 score, _ = self.rules.scoring.evaluate_move(
-                    state.board, r, c, validator, state.scored_occurrences
+                    state.board,
+                    r,
+                    c,
+                    validator,
+                    state.scored_occurrences,
+                    state.scored_words,
                 )
                 if score > 0:
                     scoring_moves.append((score, m))

@@ -172,3 +172,125 @@ def test_extending_valid_word_into_invalid_sequence_scores_zero():
     # CATA is invalid, so score is 0, CAT is not rescored!
     assert score_cata == 0
     assert len(words_cata) == 0
+
+
+def test_word_cannot_be_chosen_second_time():
+    validator = SimpleValidator(["CAT", "DOG"])
+    scoring = ScoringSystem(min_word_length=2)
+    board = Board(size=5)
+    scored_occurrences = set()
+    scored_words = set()
+
+    # Form CAT at row 0: cols 0..2
+    board.set(0, 0, "C")
+    board.set(0, 1, "A")
+    board.set(0, 2, "T")
+    score1, words1 = scoring.evaluate_move(board, 0, 2, validator, scored_occurrences, scored_words)
+    assert score1 == 3
+    assert len(words1) == 1
+    assert words1[0][0] == "CAT"
+
+    # Add to scored_occurrences and scored_words
+    scored_occurrences.add(words1[0][2])
+    scored_words.add("CAT")
+
+    # Now someone forms CAT in a completely different row: row 3, cols 1..3
+    board.set(3, 1, "C")
+    board.set(3, 2, "A")
+    board.set(3, 3, "T")
+    score2, words2 = scoring.evaluate_move(board, 3, 3, validator, scored_occurrences, scored_words)
+
+    # Must award 0 points because CAT has already been chosen in this match!
+    assert score2 == 0
+    assert len(words2) == 0
+
+
+def test_subsegment_word_matching_does_not_miss_words():
+    # BCANT: BCANT is invalid, but CANT (4) and ANT (3) are valid dictionary words
+    validator = SimpleValidator(["CANT", "ANT"])
+    scoring = ScoringSystem(min_word_length=2)
+    board = Board(size=5)
+    scored_occurrences = set()
+    scored_words = set()
+
+    board.set(0, 0, "B")
+    board.set(0, 1, "C")
+    board.set(0, 2, "A")
+    board.set(0, 3, "N")
+    # Placing T at (0, 4) completes "BCANT", subsegments CANT and ANT
+    board.set(0, 4, "T")
+
+    score, words = scoring.evaluate_move(board, 0, 4, validator, scored_occurrences, scored_words)
+    # Must NOT miss CANT! And must choose the highest matched word: CANT (len 4)
+    assert score == 4
+    assert len(words) == 1
+    assert words[0][0] == "CANT"
+    assert words[0][1] == 4
+    assert words[0][2] == ("H", 0, 1, 0, 4)
+
+
+def test_highest_matched_word_selection():
+    # SCAN contains AN (2), CAN (3), SCAN (4)
+    validator = SimpleValidator(["AN", "CAN", "SCAN"])
+    scoring = ScoringSystem(min_word_length=2)
+    board = Board(size=5)
+    scored_occurrences = set()
+    scored_words = set()
+
+    board.set(1, 0, "S")
+    board.set(1, 1, "C")
+    board.set(1, 2, "A")
+    board.set(1, 3, "N")
+
+    score, words = scoring.evaluate_move(board, 1, 3, validator, scored_occurrences, scored_words)
+    # Highest matched word is SCAN (length 4)
+    assert score == 4
+    assert len(words) == 1
+    assert words[0][0] == "SCAN"
+    assert words[0][1] == 4
+
+
+def test_highest_matched_word_when_longer_already_chosen_picks_next_highest():
+    # If SCAN was already chosen, but CAN was not:
+    validator = SimpleValidator(["CAN", "SCAN"])
+    scoring = ScoringSystem(min_word_length=2)
+    board = Board(size=5)
+    scored_occurrences = set()
+    scored_words = {"SCAN"}  # SCAN is already locked/chosen
+
+    board.set(2, 0, "S")
+    board.set(2, 1, "C")
+    board.set(2, 2, "A")
+    board.set(2, 3, "N")
+
+    score, words = scoring.evaluate_move(board, 2, 3, validator, scored_occurrences, scored_words)
+    # SCAN cannot be chosen, so it falls back to the highest available eligible word: CAN (3)
+    assert score == 3
+    assert len(words) == 1
+    assert words[0][0] == "CAN"
+
+
+def test_four_directions_checked_up_down_left_right():
+    # Center tile placed at (2, 2) creates words in both directions
+    # Horizontal: row 2: cols 1..3 -> "CAT" (Left of (2,2) is C, (2,2) is A, Right of (2,2) is T)
+    # Vertical: col 2: rows 1..3 -> "BAT" (Up of (2,2) is B, (2,2) is A, Down of (2,2) is T)
+    validator = SimpleValidator(["CAT", "BAT"])
+    scoring = ScoringSystem(min_word_length=2)
+    board = Board(size=5)
+    scored_occurrences = set()
+    scored_words = set()
+
+    board.set(2, 1, "C")
+    board.set(2, 3, "T")
+    board.set(1, 2, "B")
+    board.set(3, 2, "T")
+
+    # Place 'A' at center (2, 2)
+    board.set(2, 2, "A")
+    score, words = scoring.evaluate_move(board, 2, 2, validator, scored_occurrences, scored_words)
+    # Both CAT (horizontal) and BAT (vertical) should be found
+    assert score == 3
+    assert len(words) == 2
+    word_set = {w[0] for w in words}
+    assert word_set == {"CAT", "BAT"}
+

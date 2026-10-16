@@ -23,6 +23,12 @@ COLOR_TEXT_PRIMARY = pygame.Color(248, 250, 252)  # Slate-50
 COLOR_TEXT_MUTED = pygame.Color(148, 163, 184)    # Slate-400
 COLOR_TEXT_DIM = pygame.Color(100, 116, 139)      # Slate-500
 
+# Item Cards & Badges
+COLOR_CARD_BG = pygame.Color(24, 34, 50)          # Slate-850
+COLOR_CARD_BORDER = pygame.Color(45, 60, 85)
+COLOR_CARD_HOVER = pygame.Color(38, 52, 75)
+COLOR_BADGE_BG = pygame.Color(51, 65, 85)
+
 # UI Buttons
 COLOR_BTN_DEFAULT = pygame.Color(51, 65, 85)
 COLOR_BTN_HOVER = pygame.Color(71, 85, 105)

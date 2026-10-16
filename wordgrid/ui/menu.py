@@ -44,6 +44,7 @@ class MenuScreen:
             initial_index=0,
             font=font,
             small_font=small_font,
+            on_change=self._on_match_type_changed,
         )
 
         self.sel_board_size = OptionSelector(
@@ -75,6 +76,7 @@ class MenuScreen:
             initial_index=0,
             font=font,
             small_font=small_font,
+            on_change=self._on_p1_changed,
         )
 
         self.sel_p2 = OptionSelector(
@@ -84,6 +86,7 @@ class MenuScreen:
             initial_index=0,
             font=font,
             small_font=small_font,
+            on_change=self._on_p2_changed,
         )
 
         self.sel_depth = OptionSelector(
@@ -120,6 +123,36 @@ class MenuScreen:
             callback=self._handle_tournament_click,
         )
 
+    def _on_match_type_changed(self, idx: int, value: str):
+        if value == "Human vs AI":
+            self.sel_p1.set_value("Human", notify=False)
+            if self.sel_p2.selected_value == "Human":
+                self.sel_p2.set_value("Alpha-Beta", notify=False)
+        elif value == "AI vs AI":
+            if self.sel_p1.selected_value == "Human":
+                self.sel_p1.set_value("Alpha-Beta", notify=False)
+            if self.sel_p2.selected_value == "Human":
+                self.sel_p2.set_value("Minimax", notify=False)
+        elif value == "Human vs Human":
+            self.sel_p1.set_value("Human", notify=False)
+            self.sel_p2.set_value("Human", notify=False)
+
+    def _on_p1_changed(self, idx: int, value: str):
+        self._sync_match_type_from_players()
+
+    def _on_p2_changed(self, idx: int, value: str):
+        self._sync_match_type_from_players()
+
+    def _sync_match_type_from_players(self):
+        p1 = self.sel_p1.selected_value
+        p2 = self.sel_p2.selected_value
+        if p1 == "Human" and p2 == "Human":
+            self.sel_match_type.set_value("Human vs Human", notify=False)
+        elif p1 != "Human" and p2 != "Human":
+            self.sel_match_type.set_value("AI vs AI", notify=False)
+        else:
+            self.sel_match_type.set_value("Human vs AI", notify=False)
+
     def _handle_start_click(self):
         settings = self.get_current_settings()
         self.on_start_match(settings)
@@ -151,14 +184,32 @@ class MenuScreen:
         d_val = int(self.sel_depth.selected_value.split()[1])
         s_val = int(self.sel_mcts_sims.selected_value.split()[0])
 
+        p1 = self.sel_p1.selected_value
+        p2 = self.sel_p2.selected_value
+        match_type = self.sel_match_type.selected_value
+
+        if match_type == "Human vs Human":
+            p1 = "Human"
+            p2 = "Human"
+        elif match_type == "AI vs AI":
+            if p1 == "Human":
+                p1 = "Alpha-Beta"
+            if p2 == "Human":
+                p2 = "Minimax"
+        elif match_type == "Human vs AI":
+            if p1 != "Human" and p2 != "Human":
+                p1 = "Human"
+            elif p1 == "Human" and p2 == "Human":
+                p2 = "Alpha-Beta"
+
         return {
-            "match_type": self.sel_match_type.selected_value,
+            "match_type": match_type,
             "board_size": b_size,
             "game_mode": mode,
             "goal_score": 30,
             "move_limit": 20,
-            "p1_agent": self.sel_p1.selected_value,
-            "p2_agent": self.sel_p2.selected_value,
+            "p1_agent": p1,
+            "p2_agent": p2,
             "search_depth": d_val,
             "mcts_sims": s_val,
         }

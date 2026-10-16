@@ -31,6 +31,15 @@ class BoardRenderer:
         self.small_font = small_font
         self.selected_cell: Optional[Tuple[int, int]] = None
         self.highlighted_cells: List[Tuple[int, int]] = []
+        self._tile_fonts: dict = {}
+
+    def _get_tile_font(self, font_size: int) -> pygame.font.Font:
+        if font_size not in self._tile_fonts:
+            try:
+                self._tile_fonts[font_size] = pygame.font.SysFont("Segoe UI", font_size, bold=True)
+            except Exception:
+                self._tile_fonts[font_size] = pygame.font.Font(None, font_size)
+        return self._tile_fonts[font_size]
 
     def get_cell_at_pos(self, board: Board, pos: Tuple[int, int]) -> Optional[Tuple[int, int]]:
         """Maps screen coordinate pos to (row, col) or None."""
@@ -58,9 +67,13 @@ class BoardRenderer:
         mouse_pos = pygame.mouse.get_pos()
         hovered_cell = self.get_cell_at_pos(board, mouse_pos)
 
+        # Tile font dynamically scaled to cell size for bold, legible letters
+        tile_font_size = max(24, int(cell_size * 0.48))
+        tile_font = self._get_tile_font(tile_font_size)
+
         # Draw grid backdrop
-        pygame.draw.rect(surface, COLOR_GRID_BG, self.board_rect, border_radius=8)
-        pygame.draw.rect(surface, COLOR_PANEL_BORDER, self.board_rect, width=2, border_radius=8)
+        pygame.draw.rect(surface, COLOR_GRID_BG, self.board_rect, border_radius=10)
+        pygame.draw.rect(surface, COLOR_PANEL_BORDER, self.board_rect, width=2, border_radius=10)
 
         # Gather highlight cells from last scored words
         highlight_set = set()
@@ -78,33 +91,38 @@ class BoardRenderer:
         for r in range(size):
             for c in range(size):
                 cell_rect = pygame.Rect(
-                    self.board_rect.x + c * cell_size + 3,
-                    self.board_rect.y + r * cell_size + 3,
-                    cell_size - 6,
-                    cell_size - 6,
+                    self.board_rect.x + c * cell_size + 4,
+                    self.board_rect.y + r * cell_size + 4,
+                    cell_size - 8,
+                    cell_size - 8,
                 )
 
                 val = board.get(r, c)
-                is_hover = (r, c) == hovered_cell and val is None
-                is_selected = (r, c) == self.selected_cell and val is None
+                is_empty = (val is None)
+                is_hover = (r, c) == hovered_cell and is_empty
+                is_selected = (r, c) == self.selected_cell and is_empty
                 is_last = last_move is not None and (r, c) == (last_move[0], last_move[1])
                 is_word_cell = (r, c) in highlight_set
 
-                # Determine cell background
+                # Determine cell background and border styling
                 if is_word_cell:
-                    bg = pygame.Color(16, 185, 129, 40)
+                    bg = pygame.Color(16, 185, 129, 45)
                     border_color = COLOR_HIGHLIGHT_WORD
                     border_w = 3
                 elif is_selected:
-                    bg = COLOR_CELL_SELECTED
+                    bg = pygame.Color(14, 116, 144, 45)
                     border_color = COLOR_P1
                     border_w = 2
                 elif is_last:
-                    bg = pygame.Color(234, 179, 8, 30)
+                    bg = pygame.Color(234, 179, 8, 35)
                     border_color = COLOR_LAST_MOVE
                     border_w = 2
                 elif is_hover:
                     bg = COLOR_CELL_HOVER
+                    border_color = COLOR_P1
+                    border_w = 1
+                elif not is_empty:
+                    bg = pygame.Color(34, 48, 70)
                     border_color = COLOR_CELL_BORDER
                     border_w = 1
                 else:
@@ -112,15 +130,14 @@ class BoardRenderer:
                     border_color = COLOR_CELL_BORDER
                     border_w = 1
 
-                pygame.draw.rect(surface, bg, cell_rect, border_radius=6)
-                pygame.draw.rect(surface, border_color, cell_rect, width=border_w, border_radius=6)
+                pygame.draw.rect(surface, bg, cell_rect, border_radius=8)
+                pygame.draw.rect(surface, border_color, cell_rect, width=border_w, border_radius=8)
 
                 # Render letter if present
                 if val is not None:
-                    txt_surf = self.font.render(val, True, COLOR_TEXT_PRIMARY)
+                    txt_surf = tile_font.render(val, True, COLOR_TEXT_PRIMARY)
                     txt_rect = txt_surf.get_rect(center=cell_rect.center)
                     surface.blit(txt_surf, txt_rect)
                 elif is_selected:
-                    # Pulsing prompt or underscore
                     prompt_surf = self.small_font.render("type A-Z", True, COLOR_P1)
                     surface.blit(prompt_surf, prompt_surf.get_rect(center=cell_rect.center))
