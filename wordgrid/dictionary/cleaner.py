@@ -73,6 +73,10 @@ PRESERVED_SINGULARS: Set[str] = {
     "MECHANICS", "ROBOTICS", "DYNAMICS", "METRICS", "TACTICS", "LOGISTICS",
     # Additional common words
     "AS", "IS", "US", "HIS", "ITS", "HAS", "WAS", "DOES", "GOES", "NEWS", "LENS",
+    # Pronouns, adverbs and set phrases that look like X + S but are not plurals
+    "HERS", "OURS", "YOURS", "THEIRS", "BESIDES", "TOWARDS", "AFTERWARDS", "BACKWARDS", "FORWARDS",
+    "SOMETIMES", "NOWADAYS", "UPSTAIRS", "DOWNSTAIRS", "INDOORS", "OUTDOORS", "OVERSEAS", "WHEREABOUTS",
+    "HEADQUARTERS", "CLOTHES", "THANKS", "ODDS", "DATA", "MEDIA",
 }
 
 

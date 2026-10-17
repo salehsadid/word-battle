@@ -133,14 +133,14 @@ class WordHistoryPanel:
     # ------------------------------------------------------------------ render
     def _row_background(self, surface, rect: pygame.Rect, item: Record) -> None:
         if item is self.selected_item:
-            pygame.draw.rect(surface, col.SUCCESS_SOFT, rect, border_radius=8)
-            pygame.draw.rect(surface, col.SUCCESS, rect, width=1, border_radius=8)
+            theme.aa_rect(surface, col.SUCCESS_SOFT, rect, border_radius=8)
+            theme.aa_rect(surface, col.SUCCESS, rect, width=1, border_radius=8)
         elif item is self.hovered_item:
-            pygame.draw.rect(surface, col.SURFACE_ALT, rect, border_radius=8)
+            theme.aa_rect(surface, col.SURFACE_ALT, rect, border_radius=8)
 
     def _render_word(self, surface, rect: pygame.Rect, item: MatchedWordRecord) -> None:
         self._row_background(surface, rect, item)
-        pygame.draw.circle(surface, col.player_color(item.player), (rect.x + 14, rect.y + 17), 5)
+        theme.aa_circle(surface, col.player_color(item.player), (rect.x + 14, rect.y + 17), 5)
         theme.draw_text(surface, item.word, theme.font(theme.SIZE_HEADING, bold=True), col.TEXT,
                         (rect.x + 28, rect.y + 6))
         r, c, ch = item.move
@@ -150,7 +150,7 @@ class WordHistoryPanel:
                         max_width=rect.width - 100)
         pill = pygame.Rect(0, 0, 50, 26)
         pill.midright = (rect.right - 8, rect.centery)
-        pygame.draw.rect(surface, col.SUCCESS_SOFT, pill, border_radius=13)
+        theme.aa_rect(surface, col.SUCCESS_SOFT, pill, border_radius=13)
         theme.draw_text(surface, f"+{item.length}", theme.font(theme.SIZE_BODY, bold=True), col.SUCCESS,
                         pill.center, "center")
 
@@ -159,7 +159,7 @@ class WordHistoryPanel:
         cy = rect.centery
         theme.draw_text(surface, str(item.move_number), theme.font(theme.SIZE_CAPTION), col.TEXT_SUBTLE,
                         (rect.x + 22, cy), "center")
-        pygame.draw.circle(surface, col.player_color(item.player), (rect.x + 44, cy), 4)
+        theme.aa_circle(surface, col.player_color(item.player), (rect.x + 44, cy), 4)
         theme.draw_text(surface, item.player_name, theme.font(theme.SIZE_CAPTION, bold=True), col.TEXT,
                         (rect.x + 54, cy), "midleft", max_width=110)
         r, c, ch = item.move
@@ -228,4 +228,4 @@ class WordHistoryPanel:
             track = pygame.Rect(content.right - 5, content.y, 4, content.height)
             thumb_h = max(30, int(track.height * content.height / total_h))
             thumb_y = track.y + int((self.scroll_y / max_scroll) * (track.height - thumb_h))
-            pygame.draw.rect(surface, col.BORDER_STRONG, (track.x, thumb_y, track.width, thumb_h), border_radius=2)
+            theme.aa_rect(surface, col.BORDER_STRONG, (track.x, thumb_y, track.width, thumb_h), border_radius=2)

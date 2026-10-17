@@ -84,7 +84,7 @@ class LetterPicker:
         fnt = theme.font(theme.SIZE_HEADING, bold=True)
         for ch, r in self.keys:
             hover = r.collidepoint(mouse)
-            pygame.draw.rect(surface, col.PRIMARY if hover else col.SURFACE_ALT, r, border_radius=8)
+            theme.aa_rect(surface, col.PRIMARY if hover else col.SURFACE_ALT, r, border_radius=8)
             theme.draw_text(surface, ch, fnt, col.TEXT_ON_ACCENT if hover else col.TEXT, r.center, "center")
 
 
@@ -489,8 +489,8 @@ class GameScreen:
     def _render_banner(self, surface) -> None:
         text, accent, soft = self._banner()
         rect = self.banner_rect
-        pygame.draw.rect(surface, soft, rect, border_radius=12)
-        pygame.draw.rect(surface, accent, (rect.x, rect.y, 6, rect.height), border_top_left_radius=12,
+        theme.aa_rect(surface, soft, rect, border_radius=12)
+        theme.aa_rect(surface, accent, (rect.x, rect.y, 6, rect.height), border_top_left_radius=12,
                          border_bottom_left_radius=12)
         theme.draw_text(surface, text, theme.font(theme.SIZE_HEADING, bold=True), col.TEXT,
                         (rect.x + 22, rect.centery), "midleft", max_width=rect.width - 40)
@@ -510,9 +510,9 @@ class GameScreen:
         alpha = 255 if age < TOAST_SECONDS - 0.4 else int(255 * (TOAST_SECONDS - age) / 0.4)
         layer = pygame.Surface(rect.size, pygame.SRCALPHA)
         fill = col.SUCCESS if score else col.SURFACE
-        pygame.draw.rect(layer, (*fill[:3], alpha), layer.get_rect(), border_radius=rect.height // 2)
+        theme.aa_rect(layer, (*fill[:3], alpha), layer.get_rect(), border_radius=rect.height // 2)
         if not score:
-            pygame.draw.rect(layer, (*col.BORDER[:3], alpha), layer.get_rect(), width=1, border_radius=rect.height // 2)
+            theme.aa_rect(layer, (*col.BORDER[:3], alpha), layer.get_rect(), width=1, border_radius=rect.height // 2)
         surf.set_alpha(alpha)
         layer.blit(surf, (16, 7))
         surface.blit(layer, rect)
@@ -559,7 +559,7 @@ class GameScreen:
             headline = "You win!" if you else f"{self.names[state.winner]} wins!"
         else:
             accent, headline = col.SUCCESS, "It's a draw!"
-        pygame.draw.rect(surface, accent, (card.x, card.y, card.width, 8), border_top_left_radius=18,
+        theme.aa_rect(surface, accent, (card.x, card.y, card.width, 8), border_top_left_radius=18,
                          border_top_right_radius=18)
         theme.draw_text(surface, "FINAL RESULT", theme.font(13, bold=True), col.TEXT_SUBTLE,
                         (card.centerx, card.y + 46), "center")

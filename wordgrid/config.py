@@ -8,6 +8,8 @@ DATA_DIR = PROJECT_ROOT / "data"
 RAW_DICT_PATH = DATA_DIR / "raw_words.txt"
 CLEANED_DICT_PATH = DATA_DIR / "cleaned_words.txt"
 TEST_DICT_PATH = DATA_DIR / "test_words.txt"
+ASSETS_DIR = Path(__file__).resolve().parent / "assets"
+MENU_BACKGROUND_PATH = ASSETS_DIR / "images" / "menu_background.png"
 
 # Game Modes (termination conditions)
 MODE_UNTIL_BOARD_FULL = "UNTIL_BOARD_FULL"
@@ -29,11 +31,12 @@ MODE_LABELS = {
 # Board limits
 MIN_BOARD_SIZE = 3
 MAX_BOARD_SIZE = 8
+DEFAULT_BOARD_SIZE = 8
 
 
 @dataclass
 class GameConfig:
-    board_size: int = 5
+    board_size: int = DEFAULT_BOARD_SIZE
     min_word_length: int = 2
     game_mode: str = MODE_UNTIL_BOARD_FULL
     goal_score: int = 30

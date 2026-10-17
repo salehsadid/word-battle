@@ -15,6 +15,7 @@ from wordgrid.config import (
     MODE_MOVE_LIMIT,
     MIN_BOARD_SIZE,
     MAX_BOARD_SIZE,
+    DEFAULT_BOARD_SIZE,
     CLEANED_DICT_PATH,
     DATA_DIR,
 )
@@ -68,7 +69,7 @@ class PlayerSettings:
 @dataclass
 class MatchSettings:
     match_type: str = MATCH_HUMAN_VS_AI
-    board_size: int = 5
+    board_size: int = DEFAULT_BOARD_SIZE
     starting_player: int = 1
     game_mode: str = ALL_GAME_MODES[0]
     goal_score: int = 30

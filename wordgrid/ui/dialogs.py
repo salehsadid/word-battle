@@ -131,7 +131,7 @@ class HelpOverlay:
             y += 24
             for text in lines:
                 wrapped = wrap_text(body, text, self.card.width - 90)
-                pygame.draw.circle(surface, col.PRIMARY, (x + 6, y + 11), 3)
+                theme.aa_circle(surface, col.PRIMARY, (x + 6, y + 11), 3)
                 for line in wrapped:
                     theme.draw_text(surface, line, body, col.TEXT_MUTED, (x + 18, y))
                     y += 21

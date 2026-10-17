@@ -1,4 +1,6 @@
+import os
 import random
+import sys
 import threading
 import pygame
 from pathlib import Path
@@ -22,11 +24,27 @@ from wordgrid.ui import colors as col
 from wordgrid.ui import theme
 
 
+def _prepare_display() -> None:
+    """Draw at real screen pixels: stop Windows bitmap-stretching the window, and smooth pygame's own scaling."""
+    if sys.platform == "win32":
+        import ctypes
+        try:
+            ctypes.windll.shcore.SetProcessDpiAwareness(2)  # per-monitor DPI aware
+        except (AttributeError, OSError):
+            try:
+                ctypes.windll.user32.SetProcessDPIAware()
+            except (AttributeError, OSError):
+                pass
+    # pygame.SCALED defaults to nearest-neighbour (blocky); linear keeps resized windows smooth.
+    os.environ.setdefault("SDL_RENDER_SCALE_QUALITY", "1")
+
+
 class UIRunner:
     """Coordinates Pygame window lifecycle, screen transitions, and tournament threads."""
 
     def __init__(self, config: Optional[UIConfig] = None):
         self.config = config or UIConfig()
+        _prepare_display()
         pygame.init()
         pygame.display.set_caption("WordBattle - Strategic Word Grid")
 
@@ -223,12 +241,12 @@ class UIRunner:
             theme.draw_text(self.screen, self.tournament_progress, theme.font(theme.SIZE_BODY), col.TEXT_MUTED,
                             (card.x + 32, card.y + 70))
             bar = pygame.Rect(card.x + 32, card.y + 110, card.width - 64, 8)
-            pygame.draw.rect(self.screen, col.SURFACE_SUNK, bar, border_radius=4)
+            theme.aa_rect(self.screen, col.SURFACE_SUNK, bar, border_radius=4)
             span = bar.width // 4
             off = (pygame.time.get_ticks() // 4) % (bar.width + span) - span
             seg = pygame.Rect(bar.x + max(0, off), bar.y, min(span, bar.right - bar.x - max(0, off)), bar.height)
             if seg.width > 0:
-                pygame.draw.rect(self.screen, col.PRIMARY, seg, border_radius=4)
+                theme.aa_rect(self.screen, col.PRIMARY, seg, border_radius=4)
         elif self.tournament_error:
             theme.draw_text(self.screen, self.tournament_error, theme.font(theme.SIZE_BODY, bold=True), col.DANGER,
                             (card.x + 32, card.y + 32))

@@ -5,6 +5,9 @@ from wordgrid.config import (
     DATA_DIR,
     ALL_GAME_MODES,
     CLEANED_DICT_PATH,
+    MIN_BOARD_SIZE,
+    MAX_BOARD_SIZE,
+    DEFAULT_BOARD_SIZE,
 )
 from wordgrid.dictionary.loader import DictionaryLoader
 from wordgrid.game.engine import GameEngine
@@ -185,7 +188,8 @@ def main():
     parser.add_argument("--difficulty", choices=DIFFICULTY_OPTIONS, default="Medium",
                         help="AI difficulty preset (Custom uses --depth/--k/--sims/--c)")
     parser.add_argument("--start", type=int, choices=[0, 1, 2], default=1, help="Starting player (0 = random)")
-    parser.add_argument("--board-size", type=int, default=5, help="Grid size N (3-8, default 5)")
+    parser.add_argument("--board-size", type=int, default=DEFAULT_BOARD_SIZE,
+                        help=f"Grid size N ({MIN_BOARD_SIZE}-{MAX_BOARD_SIZE}, default {DEFAULT_BOARD_SIZE})")
     parser.add_argument("--min-len", type=int, default=2, help="Minimum word length (default 2)")
     parser.add_argument("--dict", default=None, help="Path to a word list (one word per line)")
     parser.add_argument("--game-mode", choices=ALL_GAME_MODES, default=ALL_GAME_MODES[0], help="Termination mode")
@@ -197,14 +201,16 @@ def main():
     parser.add_argument("--c", type=float, default=1.414, help="MCTS exploration constant")
     parser.add_argument("--seed", type=int, default=None, help="Random seed for reproducible AI play")
     parser.add_argument("--games", type=int, default=2, help="Tournament games per pairing")
-    parser.add_argument("--clean-dict", action="store_true", help="Force reclean raw dictionary")
+    parser.add_argument("--clean-dict", action="store_true", help="Show how to rebuild the dictionary")
 
     args = parser.parse_args()
 
     if args.clean_dict:
-        print("Recleaning offline dictionary...")
-        DictionaryLoader.load_dictionary(force_clean=True)
-        print("Dictionary cleaned successfully.")
+        # The word list is curated by scripts/build_dictionary.py; re-cleaning a raw list would overwrite it.
+        print("The dictionary is built by scripts/build_dictionary.py (details in data/README.md):")
+        print("  pip install wordfreq")
+        print("  curl -LO https://raw.githubusercontent.com/dolph/dictionary/master/enable1.txt")
+        print("  python scripts/build_dictionary.py enable1.txt")
         return
 
     if args.cli:

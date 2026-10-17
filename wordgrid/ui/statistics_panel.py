@@ -78,7 +78,7 @@ class StatisticsPanel:
         else:
             theme.draw_card(surface, rect)
 
-        pygame.draw.rect(surface, accent, (rect.x, rect.y + 12, 5, rect.height - 24), border_radius=3)
+        theme.aa_rect(surface, accent, (rect.x, rect.y + 12, 5, rect.height - 24), border_radius=3)
         x = rect.x + 20
         status = "to move" if active else ("winner" if winner else "")
         status_w = 0
@@ -104,10 +104,10 @@ class StatisticsPanel:
 
         if state.game_mode == MODE_REACH_GOAL_SCORE and state.goal_score > 0:
             bar = pygame.Rect(rect.x + 18, rect.bottom - 18, rect.width - 36, 6)
-            pygame.draw.rect(surface, col.SURFACE_SUNK, bar, border_radius=3)
+            theme.aa_rect(surface, col.SURFACE_SUNK, bar, border_radius=3)
             frac = min(1.0, score / state.goal_score)
             if frac > 0:
-                pygame.draw.rect(surface, accent, (bar.x, bar.y, max(6, int(bar.width * frac)), bar.height),
+                theme.aa_rect(surface, accent, (bar.x, bar.y, max(6, int(bar.width * frac)), bar.height),
                                  border_radius=3)
 
         now = time.time()
@@ -162,7 +162,7 @@ class InsightPanel:
         theme.draw_card(surface, self.rect)
         x = self.rect.x + 18
         y = self.rect.y + 14
-        pygame.draw.circle(surface, accent, (x + 5, y + 10), 5)
+        theme.aa_circle(surface, accent, (x + 5, y + 10), 5)
         theme.draw_text(surface, title, theme.serif(19), col.TEXT, (x + 18, y - 2))
         y += 30
         body = theme.font(theme.SIZE_BODY)

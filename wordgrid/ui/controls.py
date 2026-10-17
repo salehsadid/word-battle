@@ -87,10 +87,10 @@ class Button:
         radius = min(10, self.rect.height // 2)
         if fill is not None:
             if self.variant in ("primary", "secondary") and self.enabled:
-                pygame.draw.rect(surface, col.SHADOW, self.rect.move(0, 2), border_radius=radius)
-            pygame.draw.rect(surface, fill, self.rect, border_radius=radius)
+                theme.aa_rect(surface, col.SHADOW, self.rect.move(0, 2), border_radius=radius)
+            theme.aa_rect(surface, fill, self.rect, border_radius=radius)
         if border is not None:
-            pygame.draw.rect(surface, border, self.rect, width=1, border_radius=radius)
+            theme.aa_rect(surface, border, self.rect, width=1, border_radius=radius)
 
         icon_size = max(12, min(18, self.rect.height - 18))
         text_surf = self.font.render(self.text, True, fg) if self.text else None
@@ -115,9 +115,11 @@ class SegmentedControl:
         index: int = 0,
         font: Optional[pygame.font.Font] = None,
         on_change: Optional[Callable[[int, str], None]] = None,
+        accent: Optional[pygame.Color] = None,
     ):
         self.rect = rect
         self.options = list(options)
+        self.accent = accent or col.PRIMARY
         self.index = index
         self.font = font or theme.semibold(theme.SIZE_BODY)
         self.bold_font = theme.font(theme.SIZE_BODY, bold=True)
@@ -154,23 +156,23 @@ class SegmentedControl:
         return False
 
     def render(self, surface: pygame.Surface) -> None:
-        pygame.draw.rect(surface, col.SURFACE_ALT, self.rect, border_radius=10)
-        pygame.draw.rect(surface, col.BORDER, self.rect, width=1, border_radius=10)
+        theme.aa_rect(surface, col.SURFACE_ALT, self.rect, border_radius=10)
+        theme.aa_rect(surface, col.BORDER, self.rect, width=1, border_radius=10)
         mouse = pygame.mouse.get_pos()
         for i, label in enumerate(self.options):
             seg = self._segment(i)
             selected = i == self.index
             if selected:
-                pygame.draw.rect(surface, col.SHADOW, seg.move(0, 1), border_radius=8)
-                pygame.draw.rect(surface, col.SURFACE, seg, border_radius=8)
+                theme.aa_rect(surface, col.SHADOW, seg.move(0, 1), border_radius=8)
+                theme.aa_rect(surface, col.SURFACE, seg, border_radius=8)
                 if self.enabled:
-                    pygame.draw.rect(surface, col.PRIMARY, seg, width=1, border_radius=8)
+                    theme.aa_rect(surface, self.accent, seg, width=1, border_radius=8)
             elif self.enabled and seg.collidepoint(mouse):
-                pygame.draw.rect(surface, col.SURFACE_SUNK, seg, border_radius=8)
+                theme.aa_rect(surface, col.SURFACE_SUNK, seg, border_radius=8)
             if not self.enabled:
                 color = col.TEXT_SUBTLE
             else:
-                color = col.PRIMARY if selected else col.TEXT_MUTED
+                color = self.accent if selected else col.TEXT_MUTED
             fnt = self.bold_font if selected else self.font
             theme.draw_text(surface, label, fnt, color, seg.center, "center", max_width=seg.width - 8)
 
@@ -195,7 +197,7 @@ class UnderlineTabs(SegmentedControl):
             theme.draw_text(surface, label, self.bold_font if selected else self.font, color,
                             (seg.x + 10, seg.centery - 2), "midleft")
             if selected:
-                pygame.draw.rect(surface, col.PRIMARY, (seg.x + 6, seg.bottom - 3, seg.width - 12, 3), border_radius=2)
+                theme.aa_rect(surface, col.PRIMARY, (seg.x + 6, seg.bottom - 3, seg.width - 12, 3), border_radius=2)
 
 
 class Stepper:
@@ -256,13 +258,13 @@ class Stepper:
         return False
 
     def render(self, surface: pygame.Surface) -> None:
-        pygame.draw.rect(surface, col.SURFACE, self.rect, border_radius=10)
-        pygame.draw.rect(surface, col.BORDER, self.rect, width=1, border_radius=10)
+        theme.aa_rect(surface, col.SURFACE, self.rect, border_radius=10)
+        theme.aa_rect(surface, col.BORDER, self.rect, width=1, border_radius=10)
         minus, plus = self._buttons()
         for rect, sign, active in ((minus, "-", self.value > self.minimum), (plus, "+", self.value < self.maximum)):
             usable = active and self.enabled
             hover = usable and rect.collidepoint(pygame.mouse.get_pos())
-            pygame.draw.rect(surface, col.SURFACE_SUNK if hover else col.SURFACE_ALT, rect, border_radius=8)
+            theme.aa_rect(surface, col.SURFACE_SUNK if hover else col.SURFACE_ALT, rect, border_radius=8)
             c = col.PRIMARY if usable else col.TEXT_SUBTLE
             cx, cy = rect.center
             pygame.draw.line(surface, c, (cx - 6, cy), (cx + 6, cy), 2)
@@ -332,12 +334,12 @@ class Slider:
         t = self.track
         frac = (self.value - self.minimum) / max(1e-9, self.maximum - self.minimum)
         kx = t.x + int(frac * t.width)
-        pygame.draw.rect(surface, col.SURFACE_SUNK, t, border_radius=2)
+        theme.aa_rect(surface, col.SURFACE_SUNK, t, border_radius=2)
         accent = col.PRIMARY if self.enabled else col.TEXT_SUBTLE
-        pygame.draw.rect(surface, accent, (t.x, t.y, kx - t.x, t.height), border_radius=2)
-        pygame.draw.circle(surface, col.SHADOW, (kx, t.centery + 1), 9)
-        pygame.draw.circle(surface, col.SURFACE, (kx, t.centery), 9)
-        pygame.draw.circle(surface, accent, (kx, t.centery), 9, 2)
+        theme.aa_rect(surface, accent, (t.x, t.y, kx - t.x, t.height), border_radius=2)
+        theme.aa_circle(surface, col.SHADOW, (kx, t.centery + 1), 9)
+        theme.aa_circle(surface, col.SURFACE, (kx, t.centery), 9)
+        theme.aa_circle(surface, accent, (kx, t.centery), 9, 2)
         theme.draw_text(surface, self.fmt(self.value), theme.font(theme.SIZE_BODY, bold=True), col.TEXT,
                         (self.rect.right, self.rect.centery), "midright")
 
@@ -364,9 +366,9 @@ class Toggle:
         on = self.value
         track = col.PRIMARY if (on and self.enabled) else (col.BORDER_STRONG if self.enabled else col.SURFACE_SUNK)
         r = self.rect.height // 2
-        pygame.draw.rect(surface, track, self.rect, border_radius=r)
+        theme.aa_rect(surface, track, self.rect, border_radius=r)
         kx = self.rect.right - r if on else self.rect.x + r
-        pygame.draw.circle(surface, col.SURFACE, (kx, self.rect.centery), r - 3)
+        theme.aa_circle(surface, col.SURFACE, (kx, self.rect.centery), r - 3)
 
 
 class ChoiceCard:
@@ -398,7 +400,7 @@ class ChoiceCard:
         hover = _hovered(self.rect)
         if self.selected:
             theme.draw_card(surface, self.rect, fill=col.SURFACE, border=col.PRIMARY, width=2)
-            pygame.draw.rect(surface, col.PRIMARY, (self.rect.x + 2, self.rect.y + 14, 4, self.rect.height - 28),
+            theme.aa_rect(surface, col.PRIMARY, (self.rect.x + 2, self.rect.y + 14, 4, self.rect.height - 28),
                              border_radius=2)
         else:
             theme.draw_card(surface, self.rect, border=col.BORDER_STRONG if hover else col.BORDER, shadow=False)
@@ -473,14 +475,14 @@ class TextInput:
 
     def render(self, surface: pygame.Surface) -> None:
         fill = col.SURFACE if self.enabled else col.SURFACE_ALT
-        pygame.draw.rect(surface, fill, self.rect, border_radius=10)
+        theme.aa_rect(surface, fill, self.rect, border_radius=10)
         if self.error:
             border, width = col.DANGER, 2
         elif self.focused:
             border, width = col.PRIMARY, 2
         else:
             border, width = (col.BORDER_STRONG if _hovered(self.rect) else col.BORDER), 1
-        pygame.draw.rect(surface, border, self.rect, width=width, border_radius=10)
+        theme.aa_rect(surface, border, self.rect, width=width, border_radius=10)
 
         x = self.rect.x + 14
         if self.label:
@@ -558,8 +560,8 @@ class OptionSelector:
         return False
 
     def render(self, surface: pygame.Surface) -> None:
-        pygame.draw.rect(surface, col.SURFACE, self.rect, border_radius=10)
-        pygame.draw.rect(surface, col.BORDER, self.rect, width=1, border_radius=10)
+        theme.aa_rect(surface, col.SURFACE, self.rect, border_radius=10)
+        theme.aa_rect(surface, col.BORDER, self.rect, width=1, border_radius=10)
         x = self.rect.x + 14
         if self.label:
             theme.draw_text(surface, self.label, self.small_font, col.TEXT_MUTED, (x, self.rect.y + 4))
@@ -570,5 +572,5 @@ class OptionSelector:
                         (x, cy), "midleft", max_width=self.left_rect.x - x - 8)
         for rect, icon in ((self.left_rect, "back"), (self.right_rect, "chevron")):
             hover = self.enabled and rect.collidepoint(pygame.mouse.get_pos())
-            pygame.draw.rect(surface, col.SURFACE_SUNK if hover else col.SURFACE_ALT, rect, border_radius=8)
+            theme.aa_rect(surface, col.SURFACE_SUNK if hover else col.SURFACE_ALT, rect, border_radius=8)
             theme.draw_icon(surface, icon, rect.center, 14, col.PRIMARY if self.enabled else col.TEXT_SUBTLE)

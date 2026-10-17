@@ -83,24 +83,24 @@ class BoardRenderer:
                 if letter is None:
                     selected = (r, c) == self.selected_cell
                     if selected:
-                        pygame.draw.rect(surface, col.PRIMARY_SOFT, rect, border_radius=radius)
-                        pygame.draw.rect(surface, col.PRIMARY, rect, width=2, border_radius=radius)
+                        theme.aa_rect(surface, col.PRIMARY_SOFT, rect, border_radius=radius)
+                        theme.aa_rect(surface, col.PRIMARY, rect, width=2, border_radius=radius)
                     elif (r, c) == hovered:
-                        pygame.draw.rect(surface, col.CELL_HOVER, rect, border_radius=radius)
-                        pygame.draw.rect(surface, col.BORDER_STRONG, rect, width=1, border_radius=radius)
+                        theme.aa_rect(surface, col.CELL_HOVER, rect, border_radius=radius)
+                        theme.aa_rect(surface, col.BORDER_STRONG, rect, width=1, border_radius=radius)
                     else:
-                        pygame.draw.rect(surface, col.CELL_EMPTY, rect, border_radius=radius)
+                        theme.aa_rect(surface, col.CELL_EMPTY, rect, border_radius=radius)
                     continue
 
                 in_word = (r, c) in highlight
                 face = col.SUCCESS_SOFT if in_word else col.TILE_FACE
                 if (r, c) in flash_cells:
                     face = col.SUCCESS_SOFT.lerp(col.SUCCESS, 0.55 * flash_strength)
-                pygame.draw.rect(surface, col.TILE_EDGE, rect.move(0, 3), border_radius=radius)
-                pygame.draw.rect(surface, face, rect, border_radius=radius)
+                theme.aa_rect(surface, col.TILE_EDGE, rect.move(0, 3), border_radius=radius)
+                theme.aa_rect(surface, face, rect, border_radius=radius)
                 if in_word:
-                    pygame.draw.rect(surface, col.SUCCESS, rect, width=2, border_radius=radius)
+                    theme.aa_rect(surface, col.SUCCESS, rect, width=2, border_radius=radius)
                 if is_last:
-                    pygame.draw.rect(surface, col.AMBER, rect.inflate(2, 2), width=3, border_radius=radius + 1)
+                    theme.aa_rect(surface, col.AMBER, rect.inflate(2, 2), width=3, border_radius=radius + 1)
                 text_color = col.TEXT_ON_ACCENT if flash_strength > 0.5 and (r, c) in flash_cells else col.TILE_TEXT
                 theme.draw_text(surface, letter, tile_font, text_color, (rect.centerx, rect.centery + 1), "center")

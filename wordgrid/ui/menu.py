@@ -1,12 +1,12 @@
-"""Pre-match settings: a simple main screen plus an optional Advanced options sheet."""
+"""Pre-match settings: a two-column player setup, shared match settings and an Advanced options sheet."""
 
 import pygame
 from typing import Callable, List, Optional, Tuple
 from wordgrid.ui import colors as col
 from wordgrid.ui import theme
+from wordgrid.ui.backdrop import draw_backdrop, draw_glass_card
 from wordgrid.ui.controls import (
     Button,
-    ChoiceCard,
     OptionSelector,
     SegmentedControl,
     Slider,
@@ -14,7 +14,6 @@ from wordgrid.ui.controls import (
     TextInput,
     Toggle,
     UnderlineTabs,
-    wrap_text,
 )
 from wordgrid.ui.dialogs import HelpOverlay
 from wordgrid.config import (
@@ -26,6 +25,7 @@ from wordgrid.config import (
     MODE_MOVE_LIMIT,
     MIN_BOARD_SIZE,
     MAX_BOARD_SIZE,
+    DEFAULT_BOARD_SIZE,
 )
 from wordgrid.settings import (
     MatchSettings,
@@ -40,9 +40,11 @@ from wordgrid.settings import (
     available_dictionaries,
 )
 
+# Presets used by tests and shortcuts: (player 1 human?, player 2 human?)
 MODE_VS_AI = "vs_ai"
 MODE_TWO_PLAYERS = "two_players"
 MODE_AI_VS_AI = "ai_vs_ai"
+MODE_HUMANS = {MODE_VS_AI: (True, False), MODE_TWO_PLAYERS: (True, True), MODE_AI_VS_AI: (False, False)}
 
 ALGO_NAMES = ["Strategist", "Explorer"]
 ALGO_CONTROLLERS = [CONTROLLER_MINIMAX, CONTROLLER_MCTS]
@@ -50,6 +52,7 @@ ALGO_HINTS = [
     "Minimax search: plans ahead and weighs your threats.",
     "Monte Carlo search: simulates many possible futures.",
 ]
+CONTROLLER_OPTIONS = ["Human", "AI"]
 BOARD_OPTIONS = [f"{n}×{n}" for n in range(MIN_BOARD_SIZE, MAX_BOARD_SIZE + 1)]
 LENGTH_OPTIONS = ["Fill the board", "Reach a score", "Move limit"]
 LENGTH_MODES = [MODE_UNTIL_BOARD_FULL, MODE_REACH_GOAL_SCORE, MODE_MOVE_LIMIT]
@@ -59,29 +62,55 @@ LENGTH_HINTS = [
     "Each player gets the same number of moves.",
 ]
 
-CONTENT_X = (110, 570)
-CONTENT_W = 420
-ROW_Y = (250, 342, 434, 526)
 CONTROL_H = 42
+# Player panels: two columns with a "VS" badge between them
+PANEL_X = (40, 570)
+PANEL_Y = 104
+PANEL_W = 490
+PANEL_H = 326
+PANEL_PAD = 24
+ROW1_Y = 142   # caption offsets inside a panel
+ROW2_Y = 234
+# Shared match settings: one full-width card under both players
+MATCH_RECT = pygame.Rect(40, 446, 1020, 208)
+MATCH_COLS = ((64, 300), (388, 360), (772, 264))  # (x, width) of board / ending / first move
+MATCH_ROW_Y = 60
+HEADER_RECT = pygame.Rect(40, 18, 1020, 70)
+FOOTER_RECT = pygame.Rect(40, 666, 1020, 86)
 
 
-class _Field:
-    """A captioned control on the settings grid."""
+class _PlayerPanel:
+    """One side of the match: whether a person or an AI plays it, and how."""
 
-    def __init__(self, caption: str, widget, col_idx: int, row: int, hint: Callable[[], str] = lambda: "",
-                 width: int = CONTENT_W):
-        self.caption = caption
-        self.widget = widget
-        self.hint = hint
-        x = CONTENT_X[col_idx]
-        y = ROW_Y[row]
-        self.caption_pos = (x, y)
-        widget.rect = pygame.Rect(x, y + 22, width, CONTROL_H)
-        self.hint_pos = (x, y + 22 + CONTROL_H + 5)
+    def __init__(self, pid: int, name: str, human: bool, algo_idx: int, on_change: Callable[..., None]):
+        self.pid = pid
+        self.accent = col.player_color(pid)
+        self.rect = pygame.Rect(PANEL_X[pid - 1], PANEL_Y, PANEL_W, PANEL_H)
+        x, w = self.rect.x + PANEL_PAD, PANEL_W - 2 * PANEL_PAD
+        row = lambda off: pygame.Rect(x, self.rect.y + off + 22, w, CONTROL_H)
+        self.seg_ctrl = SegmentedControl(pygame.Rect(x, self.rect.y + 84, w, CONTROL_H), CONTROLLER_OPTIONS,
+                                         0 if human else 1, on_change=on_change, accent=self.accent)
+        self.inp_name = TextInput(row(ROW1_Y), text=name, placeholder=f"Player {pid} name",
+                                  on_change=lambda t: on_change())
+        self.seg_algo = SegmentedControl(row(ROW1_Y), ALGO_NAMES, algo_idx, on_change=on_change, accent=self.accent)
+        self.seg_diff = SegmentedControl(row(ROW2_Y), DIFFICULTIES, 1, on_change=on_change, accent=self.accent)
+
+    @property
+    def is_human(self) -> bool:
+        return self.seg_ctrl.index == 0
+
+    @property
+    def controller(self) -> str:
+        return ALGO_CONTROLLERS[self.seg_algo.index]
+
+    def widgets(self) -> list:
+        if self.is_human:
+            return [self.seg_ctrl, self.inp_name]
+        return [self.seg_ctrl, self.seg_algo, self.seg_diff]
 
 
 class MenuScreen:
-    """Friendly settings screen: choose how to play, then press Start."""
+    """Friendly settings screen: set up each player, pick the shared rules, then press Start."""
 
     def __init__(
         self,
@@ -97,59 +126,41 @@ class MenuScreen:
         self.help = HelpOverlay()
         self.advanced_open = False
         self.errors: List[str] = []
-        self.mode = MODE_VS_AI
 
         self._build_main()
         self._build_advanced(MatchSettings())
-        self._layout()
         self._refresh()
 
     # ================================================================== main screen
     def _build_main(self) -> None:
-        r = pygame.Rect(0, 0, 10, 10)
         refresh = lambda *a: self._refresh()
 
-        card_w, gap = 280, 20
-        specs = [
-            (MODE_VS_AI, "Play vs Computer", "Challenge an AI opponent at the level you choose.", ["person", "computer"]),
-            (MODE_TWO_PLAYERS, "Two Players", "Take turns with a friend on the same screen.", ["person", "person"]),
-            (MODE_AI_VS_AI, "Watch AI vs AI", "See the Strategist and the Explorer battle it out.", ["computer", "computer"]),
+        self.panels = [
+            _PlayerPanel(1, "You", True, 0, refresh),
+            _PlayerPanel(2, "Player 2", False, 0, refresh),
         ]
-        self.mode_cards: List[Tuple[str, ChoiceCard]] = []
-        for i, (mode, title, desc, icons) in enumerate(specs):
-            rect = pygame.Rect(CONTENT_X[0] + i * (card_w + gap), 120, card_w, 104)
-            card = ChoiceCard(rect, title, desc, icons, callback=lambda m=mode: self._set_mode(m))
-            self.mode_cards.append((mode, card))
+        self.inp_p1, self.inp_p2 = (p.inp_name for p in self.panels)
 
-        # Play vs Computer
-        self.inp_you = TextInput(r, text="You", placeholder="Your name", on_change=lambda t: self._refresh())
-        self.seg_opp = SegmentedControl(r, ALGO_NAMES, 0, on_change=refresh)
-        self.seg_diff = SegmentedControl(r, DIFFICULTIES, 1, on_change=refresh)
-        self.seg_first_vs = SegmentedControl(r, ["You", "Computer", "Random"], 0, on_change=refresh)
-        # Two players
-        self.inp_p1 = TextInput(r, text="Player 1", placeholder="Player 1 name", on_change=lambda t: self._refresh())
-        self.inp_p2 = TextInput(r, text="Player 2", placeholder="Player 2 name", on_change=lambda t: self._refresh())
-        self.seg_first_2p = SegmentedControl(r, ["Player 1", "Player 2", "Random"], 0, on_change=refresh)
-        # AI vs AI
-        self.seg_ai1 = SegmentedControl(r, ALGO_NAMES, 0, on_change=refresh)
-        self.seg_ai2 = SegmentedControl(r, ALGO_NAMES, 1, on_change=refresh)
-        self.seg_ai1_diff = SegmentedControl(r, DIFFICULTIES, 1, on_change=refresh)
-        self.seg_ai2_diff = SegmentedControl(r, DIFFICULTIES, 1, on_change=refresh)
-        self.seg_first_ai = SegmentedControl(r, ["Blue", "Orange", "Random"], 0, on_change=refresh)
-        # Shared
-        self.seg_board = SegmentedControl(r, BOARD_OPTIONS, 2, on_change=refresh)
-        self.seg_length = SegmentedControl(r, LENGTH_OPTIONS, 0, on_change=lambda *a: self._layout_and_refresh())
-        self.step_goal = Stepper(r, 30, 5, 300, 5, on_change=refresh, fmt=lambda v: f"{v:g} points")
-        self.step_limit = Stepper(r, 10, 1, 40, 1, on_change=refresh, fmt=lambda v: f"{v:g} moves each")
+        top = MATCH_RECT.y + MATCH_ROW_Y + 22
+        (bx, bw), (lx, lw), (fx, fw) = MATCH_COLS
+        self.seg_board = SegmentedControl(pygame.Rect(bx, top, bw, CONTROL_H), BOARD_OPTIONS,
+                                          DEFAULT_BOARD_SIZE - MIN_BOARD_SIZE, on_change=refresh)
+        self.seg_length = SegmentedControl(pygame.Rect(lx, top, lw, CONTROL_H), LENGTH_OPTIONS, 0, on_change=refresh)
+        self.seg_first = SegmentedControl(pygame.Rect(fx, top, fw, CONTROL_H), ["Player 1", "Player 2", "Random"], 0,
+                                          on_change=refresh)
+        step_rect = pygame.Rect(lx, top + CONTROL_H + 28, 200, 38)
+        self.step_goal = Stepper(step_rect, 30, 5, 300, 5, on_change=refresh, fmt=lambda v: f"{v:g} points")
+        self.step_limit = Stepper(step_rect.copy(), 10, 1, 40, 1, on_change=refresh,
+                                  fmt=lambda v: f"{v:g} moves each")
 
-        self.btn_help = Button(pygame.Rect(860, 34, 130, 40), "How to play", variant="ghost",
+        self.btn_help = Button(pygame.Rect(898, 32, 144, 42), "How to play", variant="secondary", icon="help",
                                callback=self.help.open)
-        self.btn_advanced = Button(pygame.Rect(CONTENT_X[0], 664, 210, 46), "Advanced options",
-                                   variant="secondary", callback=self._open_advanced)
-        self.btn_bench = Button(pygame.Rect(CONTENT_X[0] + 222, 664, 180, 46), "AI benchmark", variant="ghost",
+        self.btn_advanced = Button(pygame.Rect(62, 686, 210, 46), "Advanced options", variant="secondary",
+                                   icon="gear", callback=self._open_advanced)
+        self.btn_bench = Button(pygame.Rect(284, 686, 180, 46), "AI benchmark", variant="secondary", icon="trophy",
                                 callback=self._handle_tournament_click,
                                 tooltip="Round-robin of all AIs on this board; results saved to data/")
-        self.btn_start = Button(pygame.Rect(770, 660, 220, 52), "Start game", variant="primary",
+        self.btn_start = Button(pygame.Rect(818, 676, 220, 48), "Start game", variant="primary", icon="play",
                                 font=theme.font(theme.SIZE_HEADING, bold=True), callback=self._handle_start_click)
 
     def _difficulty_hint(self, algo_idx: int, difficulty: str) -> str:
@@ -163,54 +174,20 @@ class MenuScreen:
         p = DIFFICULTY_PRESETS[difficulty]["mcts"]
         return f"Simulates {p['iterations']:,} games before every move."
 
-    def _layout(self) -> None:
-        board_hint = lambda: ""
-        length_hint = lambda: LENGTH_HINTS[self.seg_length.index]
-        fields: List[_Field] = []
-        if self.mode == MODE_VS_AI:
-            fields += [
-                _Field("Your name", self.inp_you, 0, 0),
-                _Field("Opponent", self.seg_opp, 1, 0, lambda: ALGO_HINTS[self.seg_opp.index]),
-                _Field("Difficulty", self.seg_diff, 0, 1,
-                       lambda: self._difficulty_hint(self.seg_opp.index, self.seg_diff.value)),
-                _Field("Who goes first", self.seg_first_vs, 1, 1),
-            ]
-        elif self.mode == MODE_TWO_PLAYERS:
-            fields += [
-                _Field("Player 1 (blue)", self.inp_p1, 0, 0),
-                _Field("Player 2 (orange)", self.inp_p2, 1, 0),
-                _Field("Who goes first", self.seg_first_2p, 0, 1),
-            ]
-        else:
-            fields += [
-                _Field("Blue player", self.seg_ai1, 0, 0, lambda: ALGO_HINTS[self.seg_ai1.index]),
-                _Field("Orange player", self.seg_ai2, 1, 0, lambda: ALGO_HINTS[self.seg_ai2.index]),
-                _Field("Blue difficulty", self.seg_ai1_diff, 0, 1,
-                       lambda: self._difficulty_hint(self.seg_ai1.index, self.seg_ai1_diff.value)),
-                _Field("Orange difficulty", self.seg_ai2_diff, 1, 1,
-                       lambda: self._difficulty_hint(self.seg_ai2.index, self.seg_ai2_diff.value)),
-                _Field("Who goes first", self.seg_first_ai, 0, 3),
-            ]
-        fields += [
-            _Field("Board size", self.seg_board, 0, 2, board_hint),
-            _Field("How the match ends", self.seg_length, 1, 2, length_hint),
-        ]
+    def _goal_stepper(self) -> Optional[Stepper]:
         mode = LENGTH_MODES[self.seg_length.index]
         if mode == MODE_REACH_GOAL_SCORE:
-            fields.append(_Field("Target score", self.step_goal, 1, 3, width=220))
-        elif mode == MODE_MOVE_LIMIT:
-            fields.append(_Field("Moves per player", self.step_limit, 1, 3, width=220))
-        self.fields = fields
-
-    def _layout_and_refresh(self) -> None:
-        self._layout()
-        self._refresh()
+            return self.step_goal
+        if mode == MODE_MOVE_LIMIT:
+            return self.step_limit
+        return None
 
     def _set_mode(self, mode: str) -> None:
-        self.mode = mode
-        for inp in (self.inp_you, self.inp_p1, self.inp_p2):
-            inp.focused = False
-        self._layout_and_refresh()
+        """Apply a preset (who is human on each side)."""
+        for panel, human in zip(self.panels, MODE_HUMANS[mode]):
+            panel.seg_ctrl.index = 0 if human else 1
+            panel.inp_name.focused = False
+        self._refresh()
 
     # ================================================================== advanced sheet
     def _build_advanced(self, d: MatchSettings) -> None:
@@ -353,7 +330,7 @@ class MenuScreen:
     def _names(self, i1: int, i2: int) -> Tuple[str, str]:
         n1, n2 = ALGO_NAMES[i1], ALGO_NAMES[i2]
         if n1 == n2:
-            return f"{n1} Blue", f"{n2} Orange"
+            return f"{n1} 1", f"{n2} 2"
         return n1, n2
 
     def _difficulty(self, algo_idx: int, difficulty: str) -> str:
@@ -372,24 +349,19 @@ class MenuScreen:
                 self.inp_seed.error = True
                 problems.append("The random seed must be a whole number (or left empty).")
 
-        if self.mode == MODE_VS_AI:
-            i = self.seg_opp.index
-            p1 = PlayerSettings(self.inp_you.text.strip(), CONTROLLER_HUMAN)
-            p2 = PlayerSettings(ALGO_NAMES[i], ALGO_CONTROLLERS[i], self._difficulty(i, self.seg_diff.value))
-            start = [1, 2, 0][self.seg_first_vs.index]
-            match_type = MATCH_HUMAN_VS_AI
-        elif self.mode == MODE_TWO_PLAYERS:
-            p1 = PlayerSettings(self.inp_p1.text.strip(), CONTROLLER_HUMAN)
-            p2 = PlayerSettings(self.inp_p2.text.strip(), CONTROLLER_HUMAN)
-            start = [1, 2, 0][self.seg_first_2p.index]
-            match_type = MATCH_HUMAN_VS_HUMAN
-        else:
-            i1, i2 = self.seg_ai1.index, self.seg_ai2.index
-            n1, n2 = self._names(i1, i2)
-            p1 = PlayerSettings(n1, ALGO_CONTROLLERS[i1], self._difficulty(i1, self.seg_ai1_diff.value))
-            p2 = PlayerSettings(n2, ALGO_CONTROLLERS[i2], self._difficulty(i2, self.seg_ai2_diff.value))
-            start = [1, 2, 0][self.seg_first_ai.index]
-            match_type = MATCH_AI_VS_AI
+        sides = []
+        for panel in self.panels:
+            if panel.is_human:
+                sides.append(PlayerSettings(panel.inp_name.text.strip(), CONTROLLER_HUMAN))
+            else:
+                i = panel.seg_algo.index
+                sides.append(PlayerSettings(ALGO_NAMES[i], panel.controller, self._difficulty(i, panel.seg_diff.value)))
+        p1, p2 = sides
+        if not p1.is_human and not p2.is_human:
+            p1.name, p2.name = self._names(self.panels[0].seg_algo.index, self.panels[1].seg_algo.index)
+        humans = p1.is_human + p2.is_human
+        match_type = {2: MATCH_HUMAN_VS_HUMAN, 1: MATCH_HUMAN_VS_AI, 0: MATCH_AI_VS_AI}[humans]
+        start = [1, 2, 0][self.seg_first.index]
 
         defaults = MatchSettings()
         dict_path = self.dictionaries[self.sel_dict.index][1] if self.dictionaries else defaults.dictionary_path
@@ -443,16 +415,17 @@ class MenuScreen:
     def _refresh(self) -> None:
         board = MIN_BOARD_SIZE + self.seg_board.index
         self.step_minlen.set_range(2, max(2, min(board, 8)))
-        for card_mode, card in self.mode_cards:
-            card.selected = card_mode == self.mode
-        self.seg_diff.enabled = not self.override[ALGO_CONTROLLERS[self.seg_opp.index]]
-        self.seg_ai1_diff.enabled = not self.override[ALGO_CONTROLLERS[self.seg_ai1.index]]
-        self.seg_ai2_diff.enabled = not self.override[ALGO_CONTROLLERS[self.seg_ai2.index]]
-        _, self.errors = self.build_settings()
+        for panel in self.panels:
+            panel.seg_diff.enabled = not self.override[panel.controller]
+            if not panel.is_human:
+                panel.inp_name.focused = False
+        settings, self.errors = self.build_settings()
+        self.first_hint = ("Decided by a coin toss." if self.seg_first.index == 2
+                           else f"First move: {settings.player(self.seg_first.index + 1).name or 'Player'}")
         same_names = any("different names" in e for e in self.errors)
-        visible = self._visible_inputs() if not self.advanced_open else []
-        for inp in (self.inp_you, self.inp_p1, self.inp_p2):
-            inp.error = not inp.text.strip() or len(inp.text) > 16 or (same_names and inp in visible)
+        for panel in self.panels:
+            inp = panel.inp_name
+            inp.error = panel.is_human and (not inp.text.strip() or len(inp.text) > 16 or same_names)
         self.btn_start.enabled = not self.errors
 
     def get_current_settings(self) -> Optional[MatchSettings]:
@@ -471,13 +444,17 @@ class MenuScreen:
 
     # ================================================================== events
     def _main_widgets(self):
-        return [card for _, card in self.mode_cards] + [f.widget for f in self.fields] + [
-            self.btn_help, self.btn_advanced, self.btn_bench, self.btn_start]
+        widgets = [w for panel in self.panels for w in panel.widgets()]
+        widgets += [self.seg_board, self.seg_length, self.seg_first]
+        stepper = self._goal_stepper()
+        if stepper:
+            widgets.append(stepper)
+        return widgets + [self.btn_help, self.btn_advanced, self.btn_bench, self.btn_start]
 
     def _visible_inputs(self) -> List[TextInput]:
         if self.advanced_open:
             return [self.inp_seed] if self.seg_adv_tab.index == 0 else []
-        return [f.widget for f in self.fields if isinstance(f.widget, TextInput)]
+        return [p.inp_name for p in self.panels if p.is_human]
 
     def handle_event(self, event: pygame.event.Event) -> None:
         if self.help.handle_event(event):
@@ -526,40 +503,34 @@ class MenuScreen:
 
     # ================================================================== render
     def render(self, surface: pygame.Surface) -> None:
-        surface.fill(col.BG)
+        draw_backdrop(surface)
 
-        theme.draw_logo(surface, (CONTENT_X[0], 30), tile=38)
-        theme.draw_text(surface, "Build words on the grid and outscore your opponent.",
-                        theme.font(theme.SIZE_BODY), col.TEXT_MUTED, (CONTENT_X[0], 82))
+        draw_glass_card(surface, HEADER_RECT)
+        logo = theme.draw_logo(surface, (HEADER_RECT.x + 22, HEADER_RECT.y + 14), tile=38)
+        theme.draw_text(surface, "Build words. Outsmart your opponent.", theme.font(theme.SIZE_BODY),
+                        col.TEXT_MUTED, (logo.right + 24, logo.centery), "midleft")
         self.btn_help.render(surface)
 
-        for _, card in self.mode_cards:
-            card.render(surface)
+        for panel in self.panels:
+            self._render_panel(surface, panel)
+        self._render_vs_badge(surface)
+        self._render_match_card(surface)
+        draw_glass_card(surface, FOOTER_RECT)
 
-        caption_font = theme.font(theme.SIZE_CAPTION, bold=True)
-        hint_font = theme.font(theme.SIZE_CAPTION)
-        for f in self.fields:
-            theme.draw_text(surface, f.caption, caption_font, col.TEXT_MUTED, f.caption_pos)
-            f.widget.render(surface)
-            hint = f.hint()
-            if hint:
-                theme.draw_text(surface, hint, hint_font, col.TEXT_SUBTLE, f.hint_pos, max_width=CONTENT_W)
-
-        pygame.draw.line(surface, col.BORDER, (CONTENT_X[0], 640), (CONTENT_X[1] + CONTENT_W, 640))
         self.btn_advanced.render(surface)
         self.btn_bench.render(surface)
         self.btn_start.render(surface)
 
         status_font = theme.font(theme.SIZE_CAPTION)
+        status_pos = (self.btn_start.rect.right, self.btn_start.rect.bottom + 5)
         if self.errors:
-            theme.draw_text(surface, self.errors[0], status_font, col.DANGER, (self.btn_start.rect.right, 724),
-                            "topright", max_width=560)
+            theme.draw_text(surface, self.errors[0], status_font, col.DANGER, status_pos, "topright", max_width=560)
         else:
             customised = [n for c, n in zip(ALGO_CONTROLLERS, ALGO_NAMES) if self.override[c]]
             note = "Ready when you are. Press Enter to start."
             if customised:
                 note = f"Custom {' and '.join(customised)} settings active. Press Enter to start."
-            theme.draw_text(surface, note, status_font, col.TEXT_SUBTLE, (self.btn_start.rect.right, 724), "topright")
+            theme.draw_text(surface, note, status_font, col.TEXT_SUBTLE, status_pos, "topright")
 
         if self.btn_bench.is_hovered and self.btn_bench.tooltip:
             theme.draw_tooltip(surface, self.btn_bench.tooltip, self.btn_bench.rect.midtop)
@@ -567,6 +538,77 @@ class MenuScreen:
         if self.advanced_open:
             self._render_advanced(surface)
         self.help.render(surface)
+
+    def _render_panel(self, surface: pygame.Surface, panel: _PlayerPanel) -> None:
+        rect, accent = panel.rect, panel.accent
+        draw_glass_card(surface, rect)
+        theme.aa_rect(surface, accent, (rect.x + 14, rect.y, rect.width - 28, 4),
+                         border_bottom_left_radius=3, border_bottom_right_radius=3)
+
+        icon_center = (rect.x + PANEL_PAD + 24, rect.y + 44)
+        theme.aa_circle(surface, col.player_soft(panel.pid), icon_center, 24)
+        theme.draw_icon(surface, "person" if panel.is_human else "computer", icon_center, 26, accent)
+        tx = rect.x + PANEL_PAD + 62
+        theme.draw_text(surface, f"Player {panel.pid}", theme.serif(theme.SIZE_TITLE), col.TEXT, (tx, rect.y + 20))
+        theme.draw_text(surface, "Choose who controls this side.", theme.font(theme.SIZE_CAPTION),
+                        col.TEXT_SUBTLE, (tx, rect.y + 52))
+        tag = "Blue tiles" if panel.pid == 1 else "Orange tiles"
+        theme.draw_text(surface, tag, theme.font(theme.SIZE_CAPTION, bold=True), accent,
+                        (rect.right - PANEL_PAD, rect.y + 26), "topright")
+        panel.seg_ctrl.render(surface)
+
+        x, w = rect.x + PANEL_PAD, rect.width - 2 * PANEL_PAD
+        if panel.is_human:
+            self._render_field(surface, "Name", panel.inp_name, "", (x, rect.y + ROW1_Y), w)
+            note = pygame.Rect(x, rect.y + ROW2_Y + 8, w, 64)
+            theme.aa_rect(surface, col.SURFACE_ALT, note, border_radius=10)
+            hint_font = theme.font(theme.SIZE_CAPTION)
+            theme.draw_text(surface, "Plays on this computer: click a square, then type a letter.",
+                            hint_font, col.TEXT_MUTED, (note.x + 16, note.y + 14), max_width=w - 32)
+            theme.draw_text(surface, "Switch to AI to let the computer play this side.",
+                            hint_font, col.TEXT_SUBTLE, (note.x + 16, note.y + 34), max_width=w - 32)
+        else:
+            idx = panel.seg_algo.index
+            self._render_field(surface, "Algorithm", panel.seg_algo, ALGO_HINTS[idx], (x, rect.y + ROW1_Y), w)
+            self._render_field(surface, "Difficulty", panel.seg_diff,
+                               self._difficulty_hint(idx, panel.seg_diff.value), (x, rect.y + ROW2_Y), w)
+
+    @staticmethod
+    def _render_field(surface: pygame.Surface, caption: str, widget, hint: str, pos: Tuple[int, int],
+                      width: int) -> None:
+        theme.draw_text(surface, caption, theme.font(theme.SIZE_CAPTION, bold=True), col.TEXT_MUTED, pos)
+        widget.render(surface)
+        if hint:
+            theme.draw_text(surface, hint, theme.font(theme.SIZE_CAPTION), col.TEXT_SUBTLE,
+                            (pos[0], widget.rect.bottom + 5), max_width=width)
+
+    def _render_vs_badge(self, surface: pygame.Surface) -> None:
+        center = ((PANEL_X[0] + PANEL_W + PANEL_X[1]) // 2, PANEL_Y + PANEL_H // 2)
+        theme.aa_circle(surface, col.SHADOW, (center[0], center[1] + 2), 27)
+        theme.aa_circle(surface, col.SURFACE, center, 27)
+        theme.aa_circle(surface, col.BORDER, center, 27, 1)
+        theme.draw_text(surface, "VS", theme.serif(theme.SIZE_HEADING), col.TEXT_MUTED, center, "center")
+
+    def _render_match_card(self, surface: pygame.Surface) -> None:
+        card = MATCH_RECT
+        draw_glass_card(surface, card)
+        title = theme.draw_text(surface, "Match settings", theme.serif(20), col.TEXT, (card.x + PANEL_PAD, card.y + 18))
+        theme.draw_text(surface, "Shared by both players.", theme.font(theme.SIZE_CAPTION), col.TEXT_SUBTLE,
+                        (title.right + 14, title.centery), "midleft")
+
+        board = MIN_BOARD_SIZE + self.seg_board.index
+        (bx, bw), (lx, lw), (fx, fw) = MATCH_COLS
+        y = card.y + MATCH_ROW_Y
+        self._render_field(surface, "Board size", self.seg_board, f"{board * board} squares to fill.", (bx, y), bw)
+        self._render_field(surface, "How the match ends", self.seg_length, LENGTH_HINTS[self.seg_length.index],
+                           (lx, y), lw)
+        self._render_field(surface, "Who goes first", self.seg_first, self.first_hint, (fx, y), fw)
+        stepper = self._goal_stepper()
+        if stepper:
+            stepper.render(surface)
+            label = "Target score" if stepper is self.step_goal else "Moves per player"
+            theme.draw_text(surface, label, theme.font(theme.SIZE_CAPTION, bold=True), col.TEXT_MUTED,
+                            (stepper.rect.right + 14, stepper.rect.centery), "midleft")
 
     def _render_advanced(self, surface: pygame.Surface) -> None:
         theme.draw_overlay(surface)
