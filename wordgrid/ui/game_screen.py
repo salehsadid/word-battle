@@ -14,7 +14,6 @@ from wordgrid.settings import (
     CONTROLLER_RANDOM,
     DIFFICULTY_CUSTOM,
     MATCH_HUMAN_VS_AI,
-    MATCH_AI_VS_AI,
 )
 from wordgrid.ui import colors as col
 from wordgrid.ui import theme
@@ -36,7 +35,6 @@ EngineFactory = Callable[[MatchSettings, WordValidatorProtocol, random.Random],
 
 TOAST_SECONDS = 1.8
 TOOLTIP_DELAY = 0.6
-MATCH_TITLES = {MATCH_HUMAN_VS_AI: "Play vs Computer", MATCH_AI_VS_AI: "AI vs AI"}
 
 
 class LetterPicker:
@@ -77,14 +75,13 @@ class LetterPicker:
     def render(self, surface: pygame.Surface) -> None:
         if not self.visible:
             return
-        theme.draw_card(surface, self.rect, radius=14)
-        theme.draw_text(surface, "Pick a letter  (or just type it)", theme.font(theme.SIZE_CAPTION, bold=True),
-                        col.TEXT_MUTED, (self.rect.x + self.PAD, self.rect.y + self.PAD - 2))
+        theme.draw_card(surface, self.rect, border=col.TEXT)
+        theme.draw_label(surface, "Pick or type a letter", (self.rect.x + self.PAD, self.rect.y + self.PAD))
         mouse = pygame.mouse.get_pos()
-        fnt = theme.font(theme.SIZE_HEADING, bold=True)
+        fnt = theme.label(theme.SIZE_HEADING)
         for ch, r in self.keys:
             hover = r.collidepoint(mouse)
-            theme.aa_rect(surface, col.PRIMARY if hover else col.SURFACE_ALT, r, border_radius=8)
+            theme.aa_rect(surface, col.PRIMARY if hover else col.BORDER, r, border_radius=theme.RADIUS)
             theme.draw_text(surface, ch, fnt, col.TEXT_ON_ACCENT if hover else col.TEXT, r.center, "center")
 
 
@@ -112,7 +109,7 @@ class GameScreen:
         self.roles = {pid: self._role_label(pid) for pid in (1, 2)}
 
         # Layout
-        self.banner_rect = pygame.Rect(40, 82, 520, 46)
+        self.banner_rect = pygame.Rect(40, 84, 520, 40)
         self.board_renderer = BoardRenderer(pygame.Rect(62, 158, 478, 478))
         self.stats_panel = StatisticsPanel(pygame.Rect(590, 82, 470, 150))
         self.info_rect = pygame.Rect(590, 244, 470, 28)
@@ -139,9 +136,9 @@ class GameScreen:
         self.last_ai_stats: Optional[Dict[str, Any]] = None
 
         # Top bar
-        self.btn_help = Button(pygame.Rect(800, 26, 130, 40), "How to play", variant="ghost",
+        self.btn_help = Button(pygame.Rect(810, 18, 120, 36), "How to play", variant="ghost",
                                callback=self.help.open)
-        self.btn_back = Button(pygame.Rect(940, 26, 120, 40), "Settings", callback=self._ask_leave)
+        self.btn_back = Button(pygame.Rect(940, 18, 120, 36), "Settings", callback=self._ask_leave)
         # Controls under the board
         self.btn_reset = Button(pygame.Rect(40, 656, 140, 44), "Restart", callback=self._ask_restart)
         self.btn_pause = Button(pygame.Rect(190, 656, 120, 44), "Pause", callback=self.toggle_pause)
@@ -300,7 +297,7 @@ class GameScreen:
             self.toast = {"text": f"{entry['word']}  +{entry['points']}", "kind": "score", "player": player, "t0": now}
             self.flash = (entry["occurrence"], now)
         elif entry["blocked_words"]:
-            self.toast = {"text": f"{entry['blocked_words'][0]} was already used - no points", "kind": "info",
+            self.toast = {"text": f"{entry['blocked_words'][0]} was already used, no points", "kind": "info",
                           "player": player, "t0": now}
         else:
             self.toast = {"text": "No word formed", "kind": "info", "player": player, "t0": now}
@@ -387,7 +384,7 @@ class GameScreen:
             self._select_cell(None if cell == self.board_renderer.selected_cell else cell)
         else:
             self._select_cell(None)
-            self._flash_message("That square is already taken - pick an empty one.")
+            self._flash_message("That square is taken. Pick an empty one.")
 
     def _move_selection(self, key: int) -> None:
         size = self.engine.state.board.size
@@ -428,20 +425,20 @@ class GameScreen:
         if state.is_terminal:
             if state.winner in (1, 2):
                 winner = "You win" if self._turn_owner(state.winner) == "Your" else f"{self.names[state.winner]} wins"
-                return f"Match over - {winner}!", col.player_color(state.winner), col.player_soft(state.winner)
-            return "Match over - it's a draw!", col.SUCCESS, col.SUCCESS_SOFT
+                return f"Match over. {winner}!", col.player_color(state.winner), col.player_soft(state.winner)
+            return "Match over. It's a draw!", col.SUCCESS, col.SUCCESS_SOFT
         pid = state.current_player
         accent, soft = col.player_color(pid), col.player_soft(pid)
         if self.current_agent_is_ai():
             if self.is_ai_vs_ai and not self.auto_play:
-                return f"Paused - press Step to see {self.names[pid]}'s next move", accent, soft
+                return f"Paused. Press Step for {self.names[pid]}'s next move", accent, soft
             dots = "." * (int(time.time() * 3) % 4)
             return f"{self.names[pid]} is thinking{dots}", accent, soft
         owner = self._turn_owner(pid)
         if self.board_renderer.selected_cell:
             r, c = self.board_renderer.selected_cell
-            return f"{owner} turn - now choose a letter for {cell_label(r, c)}", accent, soft
-        return f"{owner} turn - click an empty square", accent, soft
+            return f"{owner} turn: choose a letter for {cell_label(r, c)}", accent, soft
+        return f"{owner} turn: click an empty square", accent, soft
 
     def _insight_content(self) -> Tuple[str, str, Optional[str], pygame.Color, bool]:
         state = self.engine.state
@@ -476,24 +473,21 @@ class GameScreen:
 
     # ------------------------------------------------------------------ render
     def _render_top_bar(self, surface) -> None:
-        theme.draw_logo(surface, (40, 20), tile=26, gap=3)
-        s = self.settings
-        title = MATCH_TITLES.get(s.match_type, "Two Players")
+        logo = theme.draw_logo(surface, (40, 18), tile=32)
         board = self.engine.state.board.size
-        theme.draw_text(surface, f"{title}  ·  {board}×{board} board  ·  "
-                                 f"{self.names[1]} vs {self.names[2]}",
-                        theme.font(theme.SIZE_CAPTION), col.TEXT_MUTED, (40, 58))
+        theme.draw_text(surface, f"{board}×{board}  ·  {self.names[1]} vs {self.names[2]}",
+                        theme.font(theme.SIZE_BODY), col.TEXT_MUTED, (logo.right + 20, logo.centery + 2), "midleft",
+                        max_width=self.btn_help.rect.x - logo.right - 40)
         self.btn_help.render(surface)
         self.btn_back.render(surface)
+        theme.rule(surface, 40, 1060, 66, width=2, color=col.TEXT)
 
     def _render_banner(self, surface) -> None:
-        text, accent, soft = self._banner()
+        text, accent, _ = self._banner()
         rect = self.banner_rect
-        theme.aa_rect(surface, soft, rect, border_radius=12)
-        theme.aa_rect(surface, accent, (rect.x, rect.y, 6, rect.height), border_top_left_radius=12,
-                         border_bottom_left_radius=12)
+        theme.draw_swatch(surface, accent, (rect.x + 7, rect.centery), 14)
         theme.draw_text(surface, text, theme.font(theme.SIZE_HEADING, bold=True), col.TEXT,
-                        (rect.x + 22, rect.centery), "midleft", max_width=rect.width - 40)
+                        (rect.x + 24, rect.centery), "midleft", max_width=rect.width - 30)
 
     def _render_toast(self, surface) -> None:
         if not self.toast:
@@ -504,17 +498,14 @@ class GameScreen:
             return
         score = self.toast["kind"] == "score"
         fnt = theme.font(theme.SIZE_HEADING if score else theme.SIZE_BODY, bold=True)
-        surf = fnt.render(self.toast["text"], True, col.TEXT_ON_ACCENT if score else col.TEXT_MUTED)
-        rect = pygame.Rect(0, 0, surf.get_width() + 32, surf.get_height() + 14)
-        rect.midtop = (self.board_renderer.board_rect.centerx, self.board_renderer.board_rect.y + 14 - int(age * 6))
+        surf = fnt.render(self.toast["text"], True, col.TEXT_ON_ACCENT)
+        rect = pygame.Rect(0, 0, surf.get_width() + 32, surf.get_height() + 16)
+        rect.midtop = (self.board_renderer.board_rect.centerx, self.board_renderer.board_rect.y + 16)
         alpha = 255 if age < TOAST_SECONDS - 0.4 else int(255 * (TOAST_SECONDS - age) / 0.4)
         layer = pygame.Surface(rect.size, pygame.SRCALPHA)
-        fill = col.SUCCESS if score else col.SURFACE
-        theme.aa_rect(layer, (*fill[:3], alpha), layer.get_rect(), border_radius=rect.height // 2)
-        if not score:
-            theme.aa_rect(layer, (*col.BORDER[:3], alpha), layer.get_rect(), width=1, border_radius=rect.height // 2)
+        theme.aa_rect(layer, (*col.PRIMARY[:3], alpha), layer.get_rect(), border_radius=theme.RADIUS)
         surf.set_alpha(alpha)
-        layer.blit(surf, (16, 7))
+        layer.blit(surf, surf.get_rect(center=layer.get_rect().center))
         surface.blit(layer, rect)
 
     def _render_tooltip(self, surface) -> None:
@@ -540,29 +531,21 @@ class GameScreen:
         for btn in (self.btn_reset, self.btn_pause, self.btn_step):
             btn.render(surface)
         if self.message and time.time() < self.message[1]:
-            text, color = self.message[0], col.DANGER
-        elif self.is_ai_vs_ai:
-            text, color = "Space pauses, Enter steps one move. F1 opens the guide.", col.TEXT_SUBTLE
-        else:
-            text, color = "Tip: arrow keys move the selection and typing places a letter.", col.TEXT_SUBTLE
-        theme.draw_text(surface, text, theme.font(theme.SIZE_CAPTION), color, (40, 714), max_width=520)
+            theme.draw_text(surface, self.message[0], theme.font(theme.SIZE_CAPTION, bold=True), col.DANGER,
+                            (40, 714), max_width=520)
 
     def _render_result(self, surface) -> None:
         state = self.engine.state
         theme.draw_overlay(surface)
         card = self.result_card
         card.center = surface.get_rect().center
-        theme.draw_card(surface, card, radius=18)
+        theme.draw_card(surface, card, border=col.TEXT, width=2)
         if state.winner in (1, 2):
-            accent = col.player_color(state.winner)
             you = self._turn_owner(state.winner) == "Your"
             headline = "You win!" if you else f"{self.names[state.winner]} wins!"
         else:
-            accent, headline = col.SUCCESS, "It's a draw!"
-        theme.aa_rect(surface, accent, (card.x, card.y, card.width, 8), border_top_left_radius=18,
-                         border_top_right_radius=18)
-        theme.draw_text(surface, "FINAL RESULT", theme.font(13, bold=True), col.TEXT_SUBTLE,
-                        (card.centerx, card.y + 46), "center")
+            headline = "It's a draw!"
+        theme.draw_label(surface, "Final result", (card.centerx, card.y + 46), anchor="center")
         theme.draw_text(surface, headline, theme.serif(34), col.TEXT, (card.centerx, card.y + 92),
                         "center", max_width=card.width - 40)
 

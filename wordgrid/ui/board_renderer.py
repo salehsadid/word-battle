@@ -9,7 +9,7 @@ FLASH_SECONDS = 1.4
 
 
 class BoardRenderer:
-    """Draws the grid as cream letter tiles on a soft board, with selection and word highlights."""
+    """Draws the grid as flat puzzle squares: yellow = newest letter, green = scored word."""
 
     def __init__(self, board_rect: pygame.Rect, font=None, small_font=None):
         self.board_rect = board_rect
@@ -52,14 +52,12 @@ class BoardRenderer:
         hovered = self.get_cell_at_pos(board, mouse) if interactive else None
 
         # Coordinate labels (1-based, matching the rest of the UI)
-        cap = theme.font(theme.SIZE_CAPTION, bold=True)
+        cap = theme.label(13)
         for i in range(size):
             top = self.cell_rect(board, 0, i)
             left = self.cell_rect(board, i, 0)
             theme.draw_text(surface, str(i + 1), cap, col.TEXT_SUBTLE, (top.centerx, self.board_rect.y - 11), "center")
             theme.draw_text(surface, str(i + 1), cap, col.TEXT_SUBTLE, (self.board_rect.x - 13, left.centery), "center")
-
-        theme.draw_card(surface, self.board_rect, fill=col.BOARD_BG, border=col.BORDER, radius=16)
 
         highlight: Set[Tuple[int, int]] = set()
         for _, _, key in highlight_occurrences or []:
@@ -72,35 +70,34 @@ class BoardRenderer:
                 flash_cells = set(occurrence_cells(key))
                 flash_strength = 1.0 - age / FLASH_SECONDS
 
-        tile_font = theme.serif(max(18, int(self.cell_rect(board, 0, 0).height * 0.56)))
+        tile_font = theme.label(max(18, int(self.cell_rect(board, 0, 0).height * 0.56)))
         for r in range(size):
             for c in range(size):
                 rect = self.cell_rect(board, r, c)
                 letter = board.grid[r][c]
                 is_last = last_move is not None and (r, c) == (last_move[0], last_move[1])
-                radius = max(6, rect.height // 7)
 
                 if letter is None:
                     selected = (r, c) == self.selected_cell
+                    pygame.draw.rect(surface, col.CELL_EMPTY, rect)
                     if selected:
-                        theme.aa_rect(surface, col.PRIMARY_SOFT, rect, border_radius=radius)
-                        theme.aa_rect(surface, col.PRIMARY, rect, width=2, border_radius=radius)
-                    elif (r, c) == hovered:
-                        theme.aa_rect(surface, col.CELL_HOVER, rect, border_radius=radius)
-                        theme.aa_rect(surface, col.BORDER_STRONG, rect, width=1, border_radius=radius)
+                        pygame.draw.rect(surface, col.TEXT, rect, 3)
                     else:
-                        theme.aa_rect(surface, col.CELL_EMPTY, rect, border_radius=radius)
+                        border = col.BORDER_STRONG if (r, c) == hovered else col.BORDER
+                        pygame.draw.rect(surface, border, rect, 2)
                     continue
 
                 in_word = (r, c) in highlight
-                face = col.SUCCESS_SOFT if in_word else col.TILE_FACE
                 if (r, c) in flash_cells:
-                    face = col.SUCCESS_SOFT.lerp(col.SUCCESS, 0.55 * flash_strength)
-                theme.aa_rect(surface, col.TILE_EDGE, rect.move(0, 3), border_radius=radius)
-                theme.aa_rect(surface, face, rect, border_radius=radius)
+                    rect = rect.inflate(round(6 * flash_strength), round(6 * flash_strength))  # brief "pop"
                 if in_word:
-                    theme.aa_rect(surface, col.SUCCESS, rect, width=2, border_radius=radius)
-                if is_last:
-                    theme.aa_rect(surface, col.AMBER, rect.inflate(2, 2), width=3, border_radius=radius + 1)
-                text_color = col.TEXT_ON_ACCENT if flash_strength > 0.5 and (r, c) in flash_cells else col.TILE_TEXT
-                theme.draw_text(surface, letter, tile_font, text_color, (rect.centerx, rect.centery + 1), "center")
+                    face, edge, ink = col.SUCCESS, col.SUCCESS, col.TEXT_ON_ACCENT
+                elif is_last:
+                    face, edge, ink = col.AMBER, col.AMBER, col.TEXT
+                else:
+                    face, edge, ink = col.TILE_FACE, col.TILE_EDGE, col.TILE_TEXT
+                pygame.draw.rect(surface, face, rect)
+                pygame.draw.rect(surface, edge, rect, 2)
+                if is_last and in_word:
+                    pygame.draw.rect(surface, col.AMBER, rect, 4)
+                theme.draw_text(surface, letter, tile_font, ink, (rect.centerx, rect.centery + 1), "center")

@@ -57,3 +57,6 @@ desktop.ini
 *.log
 scratch/
 data/raw_words.txt
+# Presentation decks (and PowerPoint lock files)
+*.pptx
+~$*

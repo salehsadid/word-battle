@@ -133,14 +133,14 @@ class WordHistoryPanel:
     # ------------------------------------------------------------------ render
     def _row_background(self, surface, rect: pygame.Rect, item: Record) -> None:
         if item is self.selected_item:
-            theme.aa_rect(surface, col.SUCCESS_SOFT, rect, border_radius=8)
-            theme.aa_rect(surface, col.SUCCESS, rect, width=1, border_radius=8)
+            pygame.draw.rect(surface, col.SUCCESS_SOFT, rect)
+            pygame.draw.rect(surface, col.SUCCESS, (rect.x, rect.y, 3, rect.height))
         elif item is self.hovered_item:
-            theme.aa_rect(surface, col.SURFACE_ALT, rect, border_radius=8)
+            pygame.draw.rect(surface, col.SURFACE_ALT, rect)
 
     def _render_word(self, surface, rect: pygame.Rect, item: MatchedWordRecord) -> None:
         self._row_background(surface, rect, item)
-        theme.aa_circle(surface, col.player_color(item.player), (rect.x + 14, rect.y + 17), 5)
+        theme.draw_swatch(surface, col.player_color(item.player), (rect.x + 14, rect.y + 17), 9)
         theme.draw_text(surface, item.word, theme.font(theme.SIZE_HEADING, bold=True), col.TEXT,
                         (rect.x + 28, rect.y + 6))
         r, c, ch = item.move
@@ -148,18 +148,15 @@ class WordHistoryPanel:
               f"{direction_label(item.occurrence_key)}"
         theme.draw_text(surface, sub, theme.font(12), col.TEXT_MUTED, (rect.x + 28, rect.y + 29),
                         max_width=rect.width - 100)
-        pill = pygame.Rect(0, 0, 50, 26)
-        pill.midright = (rect.right - 8, rect.centery)
-        theme.aa_rect(surface, col.SUCCESS_SOFT, pill, border_radius=13)
-        theme.draw_text(surface, f"+{item.length}", theme.font(theme.SIZE_BODY, bold=True), col.SUCCESS,
-                        pill.center, "center")
+        theme.draw_text(surface, f"+{item.length}", theme.font(theme.SIZE_HEADING, bold=True), col.TEXT,
+                        (rect.right - 12, rect.centery), "midright")
 
     def _render_log(self, surface, rect: pygame.Rect, item: MoveLogRecord) -> None:
         self._row_background(surface, rect, item)
         cy = rect.centery
         theme.draw_text(surface, str(item.move_number), theme.font(theme.SIZE_CAPTION), col.TEXT_SUBTLE,
                         (rect.x + 22, cy), "center")
-        theme.aa_circle(surface, col.player_color(item.player), (rect.x + 44, cy), 4)
+        theme.draw_swatch(surface, col.player_color(item.player), (rect.x + 44, cy), 8)
         theme.draw_text(surface, item.player_name, theme.font(theme.SIZE_CAPTION, bold=True), col.TEXT,
                         (rect.x + 54, cy), "midleft", max_width=110)
         r, c, ch = item.move
@@ -176,9 +173,9 @@ class WordHistoryPanel:
 
     def render(self, surface: pygame.Surface) -> None:
         self.update()
-        theme.draw_card(surface, self.rect)
+        theme.draw_card(surface, self.rect, border=col.BORDER_STRONG)
         x = self.rect.x + 18
-        theme.draw_text(surface, "Match history", theme.serif(20), col.TEXT, (x, self.rect.y + 14))
+        theme.draw_text(surface, "History", theme.serif(20), col.TEXT, (x, self.rect.y + 14))
         total = sum(i.length for i in self.items)
         theme.draw_text(surface, f"{len(self.items)} words  ·  {total} points", theme.font(theme.SIZE_CAPTION),
                         col.TEXT_MUTED, (self.rect.right - 18, self.rect.y + 20), "topright")
@@ -219,7 +216,7 @@ class WordHistoryPanel:
                 else:
                     self._render_log(surface, rect, item)
                 if idx < len(records) - 1:
-                    pygame.draw.line(surface, col.SURFACE_ALT, (rect.x + 10, rect.bottom + 1),
+                    pygame.draw.line(surface, col.BORDER, (rect.x + 10, rect.bottom + 1),
                                      (rect.right - 10, rect.bottom + 1))
         finally:
             surface.set_clip(old_clip)
@@ -228,4 +225,4 @@ class WordHistoryPanel:
             track = pygame.Rect(content.right - 5, content.y, 4, content.height)
             thumb_h = max(30, int(track.height * content.height / total_h))
             thumb_y = track.y + int((self.scroll_y / max_scroll) * (track.height - thumb_h))
-            theme.aa_rect(surface, col.BORDER_STRONG, (track.x, thumb_y, track.width, thumb_h), border_radius=2)
+            pygame.draw.rect(surface, col.BORDER_STRONG, (track.x, thumb_y, track.width, thumb_h))

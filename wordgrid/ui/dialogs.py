@@ -55,7 +55,7 @@ class ConfirmDialog:
             return
         self._layout(surface)
         theme.draw_overlay(surface)
-        theme.draw_card(surface, self.card, radius=16)
+        theme.draw_card(surface, self.card, border=col.TEXT, width=2)
         theme.draw_text(surface, self.title, theme.serif(theme.SIZE_TITLE), col.TEXT,
                         (self.card.x + 24, self.card.y + 20))
         fnt = theme.font(theme.SIZE_BODY)
@@ -95,7 +95,7 @@ class HelpOverlay:
 
     def __init__(self):
         self.visible = False
-        self.card = pygame.Rect(0, 0, 680, 600)
+        self.card = pygame.Rect(0, 0, 680, 540)
         self.btn_close = Button(pygame.Rect(0, 0, 150, 42), "Got it", variant="primary", callback=self.close)
 
     def open(self) -> None:
@@ -120,18 +120,17 @@ class HelpOverlay:
             return
         self.card.center = surface.get_rect().center
         theme.draw_overlay(surface)
-        theme.draw_card(surface, self.card, radius=16)
+        theme.draw_card(surface, self.card, border=col.TEXT, width=2)
         x = self.card.x + 32
         theme.draw_text(surface, "How to play", theme.serif(26), col.TEXT, (x, self.card.y + 38), "midleft")
         y = self.card.y + 74
-        head = theme.font(theme.SIZE_BODY, bold=True)
         body = theme.font(theme.SIZE_BODY)
         for title, lines in HELP_SECTIONS:
-            theme.draw_text(surface, title, head, col.PRIMARY, (x, y))
+            theme.draw_label(surface, title, (x, y + 2), color=col.TEXT, size=14)
             y += 24
             for text in lines:
                 wrapped = wrap_text(body, text, self.card.width - 90)
-                theme.aa_circle(surface, col.PRIMARY, (x + 6, y + 11), 3)
+                theme.draw_swatch(surface, col.TEXT, (x + 5, y + 11), 5)
                 for line in wrapped:
                     theme.draw_text(surface, line, body, col.TEXT_MUTED, (x + 18, y))
                     y += 21

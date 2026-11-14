@@ -228,11 +228,11 @@ class UIRunner:
 
     def _render_tournament_screen(self):
         self.screen.fill(col.BG)
-        theme.draw_text(self.screen, "AI benchmark", theme.font(theme.SIZE_DISPLAY, bold=True), col.TEXT, (60, 40))
-        theme.draw_text(self.screen, "Random, Strategist (Minimax) and Explorer (MCTS) play each other twice, "
+        theme.draw_text(self.screen, "AI benchmark", theme.serif(theme.SIZE_DISPLAY), col.TEXT, (60, 40))
+        theme.draw_text(self.screen, "Random, Minimax and MCTS play each other twice, "
                                      "alternating who starts.", theme.font(theme.SIZE_BODY), col.TEXT_MUTED, (60, 88))
         card = pygame.Rect(60, 130, 980, 520)
-        theme.draw_card(self.screen, card, radius=16)
+        theme.draw_card(self.screen, card, border=col.BORDER_STRONG)
 
         if self.tournament_running:
             dots = "." * (pygame.time.get_ticks() // 400 % 4)

@@ -9,7 +9,7 @@ RAW_DICT_PATH = DATA_DIR / "raw_words.txt"
 CLEANED_DICT_PATH = DATA_DIR / "cleaned_words.txt"
 TEST_DICT_PATH = DATA_DIR / "test_words.txt"
 ASSETS_DIR = Path(__file__).resolve().parent / "assets"
-MENU_BACKGROUND_PATH = ASSETS_DIR / "images" / "menu_background.png"
+MENU_BACKGROUND_PATH = ASSETS_DIR / "images" / "paper_background.png"  # built by scripts/make_paper_background.py
 
 # Game Modes (termination conditions)
 MODE_UNTIL_BOARD_FULL = "UNTIL_BOARD_FULL"

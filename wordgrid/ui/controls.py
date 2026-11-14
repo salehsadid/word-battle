@@ -1,4 +1,4 @@
-"""Reusable UI controls in the soft light theme."""
+"""Reusable UI controls in the flat puzzle-paper theme."""
 
 import time
 import pygame
@@ -75,19 +75,17 @@ class Button:
         if self.variant == "primary":
             return (col.PRIMARY_HOVER if hover else col.PRIMARY), None, col.TEXT_ON_ACCENT
         if self.variant == "danger":
-            return (col.DANGER if hover else col.DANGER_SOFT), None, (col.TEXT_ON_ACCENT if hover else col.DANGER)
+            return (col.DANGER if hover else col.SURFACE), col.DANGER, (col.TEXT_ON_ACCENT if hover else col.DANGER)
         if self.variant == "ghost":
-            return (col.SURFACE_ALT if hover else None), None, col.PRIMARY
-        return (col.SURFACE_ALT if hover else col.SURFACE), col.BORDER, col.TEXT
+            return (col.SURFACE_ALT if hover else None), None, col.TEXT
+        return (col.SURFACE_ALT if hover else col.SURFACE), col.TEXT, col.TEXT
 
     def render(self, surface: pygame.Surface) -> None:
         if not self.visible:
             return
         fill, border, fg = self._colors()
-        radius = min(10, self.rect.height // 2)
+        radius = theme.RADIUS
         if fill is not None:
-            if self.variant in ("primary", "secondary") and self.enabled:
-                theme.aa_rect(surface, col.SHADOW, self.rect.move(0, 2), border_radius=radius)
             theme.aa_rect(surface, fill, self.rect, border_radius=radius)
         if border is not None:
             theme.aa_rect(surface, border, self.rect, width=1, border_radius=radius)
@@ -138,9 +136,9 @@ class SegmentedControl:
 
     def _segment(self, i: int) -> pygame.Rect:
         n = len(self.options)
-        inner = self.rect.inflate(-6, -6)
-        w = inner.width / n
-        return pygame.Rect(round(inner.x + i * w), inner.y, round(w), inner.height)
+        w = self.rect.width / n
+        x0 = round(self.rect.x + i * w)
+        return pygame.Rect(x0, self.rect.y, round(self.rect.x + (i + 1) * w) - x0, self.rect.height)
 
     def handle_event(self, event: pygame.event.Event) -> bool:
         if not self.enabled:
@@ -156,25 +154,26 @@ class SegmentedControl:
         return False
 
     def render(self, surface: pygame.Surface) -> None:
-        theme.aa_rect(surface, col.SURFACE_ALT, self.rect, border_radius=10)
-        theme.aa_rect(surface, col.BORDER, self.rect, width=1, border_radius=10)
+        """Outlined row of options; the chosen one is filled with ink."""
+        outline = col.TEXT if self.enabled else col.BORDER
+        theme.aa_rect(surface, col.SURFACE, self.rect, border_radius=theme.RADIUS)
         mouse = pygame.mouse.get_pos()
         for i, label in enumerate(self.options):
             seg = self._segment(i)
             selected = i == self.index
             if selected:
-                theme.aa_rect(surface, col.SHADOW, seg.move(0, 1), border_radius=8)
-                theme.aa_rect(surface, col.SURFACE, seg, border_radius=8)
-                if self.enabled:
-                    theme.aa_rect(surface, self.accent, seg, width=1, border_radius=8)
+                fill = col.PRIMARY if self.enabled else col.SURFACE_SUNK
+                theme.aa_rect(surface, fill, seg, border_radius=theme.RADIUS)
             elif self.enabled and seg.collidepoint(mouse):
-                theme.aa_rect(surface, col.SURFACE_SUNK, seg, border_radius=8)
+                pygame.draw.rect(surface, col.SURFACE_ALT, seg.inflate(-2, -2))
+            if i > 0 and not selected and i - 1 != self.index:
+                pygame.draw.line(surface, col.BORDER, (seg.x, seg.y + 8), (seg.x, seg.bottom - 9))
             if not self.enabled:
                 color = col.TEXT_SUBTLE
             else:
-                color = self.accent if selected else col.TEXT_MUTED
-            fnt = self.bold_font if selected else self.font
-            theme.draw_text(surface, label, fnt, color, seg.center, "center", max_width=seg.width - 8)
+                color = col.TEXT_ON_ACCENT if selected else col.TEXT
+            theme.draw_text(surface, label, self.font, color, seg.center, "center", max_width=seg.width - 8)
+        theme.aa_rect(surface, outline, self.rect, width=1, border_radius=theme.RADIUS)
 
 
 class UnderlineTabs(SegmentedControl):
@@ -193,11 +192,11 @@ class UnderlineTabs(SegmentedControl):
         for i, label in enumerate(self.options):
             seg = self._segment(i)
             selected = i == self.index
-            color = col.PRIMARY if selected else (col.TEXT if seg.collidepoint(mouse) else col.TEXT_MUTED)
+            color = col.TEXT if selected or seg.collidepoint(mouse) else col.TEXT_SUBTLE
             theme.draw_text(surface, label, self.bold_font if selected else self.font, color,
                             (seg.x + 10, seg.centery - 2), "midleft")
             if selected:
-                theme.aa_rect(surface, col.PRIMARY, (seg.x + 6, seg.bottom - 3, seg.width - 12, 3), border_radius=2)
+                pygame.draw.rect(surface, col.TEXT, (seg.x + 8, seg.bottom - 3, seg.width - 16, 3))
 
 
 class Stepper:
@@ -258,14 +257,15 @@ class Stepper:
         return False
 
     def render(self, surface: pygame.Surface) -> None:
-        theme.aa_rect(surface, col.SURFACE, self.rect, border_radius=10)
-        theme.aa_rect(surface, col.BORDER, self.rect, width=1, border_radius=10)
+        theme.aa_rect(surface, col.SURFACE, self.rect, border_radius=theme.RADIUS)
+        theme.aa_rect(surface, col.TEXT if self.enabled else col.BORDER, self.rect, width=1,
+                      border_radius=theme.RADIUS)
         minus, plus = self._buttons()
         for rect, sign, active in ((minus, "-", self.value > self.minimum), (plus, "+", self.value < self.maximum)):
             usable = active and self.enabled
             hover = usable and rect.collidepoint(pygame.mouse.get_pos())
-            theme.aa_rect(surface, col.SURFACE_SUNK if hover else col.SURFACE_ALT, rect, border_radius=8)
-            c = col.PRIMARY if usable else col.TEXT_SUBTLE
+            theme.aa_rect(surface, col.SURFACE_SUNK if hover else col.SURFACE_ALT, rect, border_radius=theme.RADIUS_SMALL)
+            c = col.TEXT if usable else col.BORDER_STRONG
             cx, cy = rect.center
             pygame.draw.line(surface, c, (cx - 6, cy), (cx + 6, cy), 2)
             if sign == "+":
@@ -334,10 +334,9 @@ class Slider:
         t = self.track
         frac = (self.value - self.minimum) / max(1e-9, self.maximum - self.minimum)
         kx = t.x + int(frac * t.width)
-        theme.aa_rect(surface, col.SURFACE_SUNK, t, border_radius=2)
+        pygame.draw.rect(surface, col.BORDER, t)
         accent = col.PRIMARY if self.enabled else col.TEXT_SUBTLE
-        theme.aa_rect(surface, accent, (t.x, t.y, kx - t.x, t.height), border_radius=2)
-        theme.aa_circle(surface, col.SHADOW, (kx, t.centery + 1), 9)
+        pygame.draw.rect(surface, accent, (t.x, t.y, kx - t.x, t.height))
         theme.aa_circle(surface, col.SURFACE, (kx, t.centery), 9)
         theme.aa_circle(surface, accent, (kx, t.centery), 9, 2)
         theme.draw_text(surface, self.fmt(self.value), theme.font(theme.SIZE_BODY, bold=True), col.TEXT,
@@ -400,10 +399,8 @@ class ChoiceCard:
         hover = _hovered(self.rect)
         if self.selected:
             theme.draw_card(surface, self.rect, fill=col.SURFACE, border=col.PRIMARY, width=2)
-            theme.aa_rect(surface, col.PRIMARY, (self.rect.x + 2, self.rect.y + 14, 4, self.rect.height - 28),
-                             border_radius=2)
         else:
-            theme.draw_card(surface, self.rect, border=col.BORDER_STRONG if hover else col.BORDER, shadow=False)
+            theme.draw_card(surface, self.rect, border=col.BORDER_STRONG if hover else col.BORDER)
         x = self.rect.x + 22
         theme.draw_text(surface, self.title, theme.serif(21), col.PRIMARY if self.selected else col.TEXT,
                         (x, self.rect.y + 18))
@@ -475,14 +472,14 @@ class TextInput:
 
     def render(self, surface: pygame.Surface) -> None:
         fill = col.SURFACE if self.enabled else col.SURFACE_ALT
-        theme.aa_rect(surface, fill, self.rect, border_radius=10)
+        theme.aa_rect(surface, fill, self.rect, border_radius=theme.RADIUS)
         if self.error:
             border, width = col.DANGER, 2
         elif self.focused:
-            border, width = col.PRIMARY, 2
+            border, width = col.TEXT, 2
         else:
-            border, width = (col.BORDER_STRONG if _hovered(self.rect) else col.BORDER), 1
-        theme.aa_rect(surface, border, self.rect, width=width, border_radius=10)
+            border, width = (col.TEXT if _hovered(self.rect) else col.BORDER_STRONG), 1
+        theme.aa_rect(surface, border, self.rect, width=width, border_radius=theme.RADIUS)
 
         x = self.rect.x + 14
         if self.label:
@@ -560,8 +557,8 @@ class OptionSelector:
         return False
 
     def render(self, surface: pygame.Surface) -> None:
-        theme.aa_rect(surface, col.SURFACE, self.rect, border_radius=10)
-        theme.aa_rect(surface, col.BORDER, self.rect, width=1, border_radius=10)
+        theme.aa_rect(surface, col.SURFACE, self.rect, border_radius=theme.RADIUS)
+        theme.aa_rect(surface, col.BORDER_STRONG, self.rect, width=1, border_radius=theme.RADIUS)
         x = self.rect.x + 14
         if self.label:
             theme.draw_text(surface, self.label, self.small_font, col.TEXT_MUTED, (x, self.rect.y + 4))
@@ -572,5 +569,5 @@ class OptionSelector:
                         (x, cy), "midleft", max_width=self.left_rect.x - x - 8)
         for rect, icon in ((self.left_rect, "back"), (self.right_rect, "chevron")):
             hover = self.enabled and rect.collidepoint(pygame.mouse.get_pos())
-            theme.aa_rect(surface, col.SURFACE_SUNK if hover else col.SURFACE_ALT, rect, border_radius=8)
-            theme.draw_icon(surface, icon, rect.center, 14, col.PRIMARY if self.enabled else col.TEXT_SUBTLE)
+            theme.aa_rect(surface, col.SURFACE_SUNK if hover else col.SURFACE_ALT, rect, border_radius=theme.RADIUS_SMALL)
+            theme.draw_icon(surface, icon, rect.center, 14, col.TEXT if self.enabled else col.TEXT_SUBTLE)

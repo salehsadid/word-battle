@@ -74,20 +74,19 @@ class StatisticsPanel:
         active = state.current_player == pid and not state.is_terminal
         winner = state.is_terminal and state.winner == pid
         if active or winner:
-            theme.draw_card(surface, rect, fill=col.player_soft(pid), border=accent, width=2)
+            theme.draw_card(surface, rect, border=col.TEXT, width=2)
         else:
-            theme.draw_card(surface, rect)
+            theme.draw_card(surface, rect, border=col.BORDER_STRONG)
 
-        theme.aa_rect(surface, accent, (rect.x, rect.y + 12, 5, rect.height - 24), border_radius=3)
-        x = rect.x + 20
+        x = rect.x + 18
         status = "to move" if active else ("winner" if winner else "")
         status_w = 0
         if status:
-            sr_ = theme.draw_text(surface, status, theme.font(theme.SIZE_CAPTION, bold=True),
-                                  accent if active else col.AMBER, (rect.right - 14, rect.y + 16), "topright")
+            sr_ = theme.draw_label(surface, status, (rect.right - 14, rect.y + 17), color=col.TEXT, anchor="topright")
             status_w = sr_.width + 10
-        theme.draw_text(surface, name, theme.serif(20), col.TEXT, (x, rect.y + 12),
-                        max_width=rect.width - 40 - status_w)
+        title = theme.draw_text(surface, name, theme.serif(20), col.TEXT, (x + 20, rect.y + 12),
+                                max_width=rect.width - 60 - status_w)
+        theme.draw_swatch(surface, accent, (x + 6, title.centery + 1), 12)
         theme.draw_text(surface, role, theme.font(theme.SIZE_CAPTION), col.TEXT_MUTED, (x, rect.y + 40),
                         max_width=rect.width - 34)
 
@@ -103,12 +102,11 @@ class StatisticsPanel:
                         (rect.right - 14, sr.bottom - 26), "topright")
 
         if state.game_mode == MODE_REACH_GOAL_SCORE and state.goal_score > 0:
-            bar = pygame.Rect(rect.x + 18, rect.bottom - 18, rect.width - 36, 6)
-            theme.aa_rect(surface, col.SURFACE_SUNK, bar, border_radius=3)
+            bar = pygame.Rect(rect.x + 18, rect.bottom - 16, rect.width - 36, 4)
+            pygame.draw.rect(surface, col.BORDER, bar)
             frac = min(1.0, score / state.goal_score)
             if frac > 0:
-                theme.aa_rect(surface, accent, (bar.x, bar.y, max(6, int(bar.width * frac)), bar.height),
-                                 border_radius=3)
+                pygame.draw.rect(surface, accent, (bar.x, bar.y, max(4, int(bar.width * frac)), bar.height))
 
         now = time.time()
         for pop in self.popups:
@@ -129,7 +127,7 @@ class StatisticsPanel:
 
 
 def render_info_strip(surface, rect: pygame.Rect, state: GameState) -> None:
-    """Pills: termination rule, squares left, move number."""
+    """One line: termination rule, squares left, move number."""
     mode = MODE_LABELS.get(state.game_mode, state.game_mode)
     if state.game_mode == MODE_REACH_GOAL_SCORE:
         mode = f"First to {state.goal_score} points"
@@ -159,10 +157,10 @@ class InsightPanel:
         accent,
         thinking: bool = False,
     ) -> None:
-        theme.draw_card(surface, self.rect)
+        theme.draw_card(surface, self.rect, border=col.BORDER_STRONG)
         x = self.rect.x + 18
         y = self.rect.y + 14
-        theme.aa_circle(surface, accent, (x + 5, y + 10), 5)
+        theme.draw_swatch(surface, accent, (x + 5, y + 10), 10)
         theme.draw_text(surface, title, theme.serif(19), col.TEXT, (x + 18, y - 2))
         y += 30
         body = theme.font(theme.SIZE_BODY)

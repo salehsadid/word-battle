@@ -1,32 +1,36 @@
 """Fonts and drawing helpers shared by every screen (cards, text, icons, tooltips)."""
 
 import math
+import os
 import pygame
 from typing import Dict, Tuple
 from wordgrid.ui import colors as col
 
-_FONTS: Dict[Tuple[str, int, bool], pygame.font.Font] = {}
+_FONTS: Dict[Tuple[str, int], pygame.font.Font] = {}
 
-# Typography: a classic serif for titles and tiles, a clean sans for everything else.
-SERIF = "georgia,cambria,constantia,palatinolinotype"
-SANS = "segoeui,calibri,arial"
-SANS_SEMIBOLD = "segoeuisemibold,segoeui,calibri,arial"
+# Typography, newspaper-puzzle style: Georgia Bold for titles, Franklin Gothic for labels and
+# letter tiles, Segoe UI for running text. Font files are loaded by name because pygame's SysFont
+# matching on Windows picks odd faces (e.g. "segoeui" -> Segoe UI Light, "arial" -> Arial Narrow).
+_FONT_DIR = os.path.join(os.environ.get("WINDIR", r"C:\Windows"), "Fonts")
+_FACES = {
+    # face: (font files to try, SysFont fallback, bold flag for the fallback)
+    "sans": (["segoeui.ttf", "arial.ttf"], "segoeui,arial", False),
+    "sans_semibold": (["seguisb.ttf", "segoeuib.ttf", "arialbd.ttf"], "segoeuisemibold,arial", True),
+    "sans_bold": (["segoeuib.ttf", "arialbd.ttf"], "segoeui,arial", True),
+    "serif_bold": (["georgiab.ttf", "timesbd.ttf"], "georgia,timesnewroman", True),
+    "serif": (["georgia.ttf", "times.ttf"], "georgia,timesnewroman", False),
+    "label": (["framd.ttf", "seguisb.ttf", "arialbd.ttf"], "franklingothicmedium,arial", True),
+}
 
-# Type scale (larger than before for readability)
+# Type scale
 SIZE_DISPLAY = 36
 SIZE_TITLE = 24
 SIZE_HEADING = 18
 SIZE_BODY = 16
 SIZE_CAPTION = 14
 
-RADIUS = 10
-RADIUS_SMALL = 6
-
-# Classic letter-tile values, shown small on logo tiles
-LETTER_POINTS = {
-    **dict.fromkeys("AEILNORSTU", 1), **dict.fromkeys("DG", 2), **dict.fromkeys("BCMP", 3),
-    **dict.fromkeys("FHVWY", 4), "K": 5, **dict.fromkeys("JX", 8), **dict.fromkeys("QZ", 10),
-}
+RADIUS = 4
+RADIUS_SMALL = 3
 
 
 # Anti-aliased shapes: drawn at SUPERSAMPLE x size, smoothed down once, then cached per size and colour.
@@ -109,55 +113,69 @@ def aa_circle(surface, color, center, radius, width: int = 0) -> pygame.Rect:
     return surface.blit(shape, shape.get_rect(center=(round(center[0]), round(center[1]))))
 
 
-def _load(family: str, size: int, bold: bool) -> pygame.font.Font:
-    key = (family, size, bold)
+def _load(face: str, size: int) -> pygame.font.Font:
+    key = (face, size)
     if key not in _FONTS:
-        try:
-            _FONTS[key] = pygame.font.SysFont(family, size, bold=bold)
-        except Exception:
-            _FONTS[key] = pygame.font.Font(None, int(size * 1.35))
+        files, family, bold = _FACES[face]
+        fnt = None
+        for name in files:
+            path = os.path.join(_FONT_DIR, name)
+            if os.path.exists(path):
+                try:
+                    fnt = pygame.font.Font(path, size)
+                    break
+                except (pygame.error, OSError):
+                    pass
+        if fnt is None:
+            try:
+                fnt = pygame.font.SysFont(family, size, bold=bold)
+            except Exception:
+                fnt = pygame.font.Font(None, int(size * 1.35))
+        _FONTS[key] = fnt
     return _FONTS[key]
 
 
 def font(size: int, bold: bool = False) -> pygame.font.Font:
     """Sans-serif UI font. Small regular text uses semibold so it stays legible."""
     if bold:
-        return _load(SANS, size, True)
+        return _load("sans_bold", size)
     if size <= SIZE_CAPTION:
-        return _load(SANS_SEMIBOLD, size, False)
-    return _load(SANS, size, False)
+        return _load("sans_semibold", size)
+    return _load("sans", size)
 
 
 def semibold(size: int) -> pygame.font.Font:
     """Semibold sans: sturdier than regular, lighter than bold."""
-    return _load(SANS_SEMIBOLD, size, False)
+    return _load("sans_semibold", size)
 
 
 def serif(size: int, bold: bool = True) -> pygame.font.Font:
-    """Serif display font for titles, headlines and letter tiles."""
-    return _load(SERIF, size, bold)
+    """Georgia: titles and headlines."""
+    return _load("serif_bold" if bold else "serif", size)
 
 
-def draw_tile(surface, rect: pygame.Rect, letter: str, show_points: bool = False) -> None:
-    """A single cream letter tile with an optional point value."""
-    radius = max(4, rect.height // 7)
-    aa_rect(surface, col.TILE_EDGE, rect.move(0, max(2, rect.height // 14)), border_radius=radius)
-    aa_rect(surface, col.TILE_FACE, rect, border_radius=radius)
-    draw_text(surface, letter, serif(int(rect.height * 0.6)), col.TILE_TEXT,
-              (rect.centerx - (rect.width * 0.04 if show_points else 0), rect.centery), "center")
-    if show_points and letter in LETTER_POINTS:
-        draw_text(surface, str(LETTER_POINTS[letter]), _load(SANS, max(9, rect.height // 4), True), col.TILE_TEXT,
-                  (rect.right - rect.width * 0.1, rect.bottom - rect.height * 0.06), "bottomright")
+def label(size: int) -> pygame.font.Font:
+    """Franklin Gothic: section labels, letter tiles and keys."""
+    return _load("label", size)
+
+
+def draw_label(surface, text: str, pos, color=None, size: int = 13, anchor: str = "topleft") -> pygame.Rect:
+    """Small upper-case section label ("PLAYERS", "MATCH")."""
+    return draw_text(surface, text.upper(), label(size), color if color is not None else col.TEXT_SUBTLE, pos, anchor)
 
 
 def draw_logo(surface, pos, tile: int = 34, gap: int = 4) -> pygame.Rect:
-    """'WORD' as letter tiles followed by 'Battle' in serif: the app's wordmark."""
-    x, y = pos
-    for ch in "WORD":
-        draw_tile(surface, pygame.Rect(x, y, tile, tile), ch)
-        x += tile + gap
-    r = draw_text(surface, "Battle", serif(int(tile * 0.95)), col.TEXT, (x + gap * 2, y + tile // 2 + 1), "midleft")
-    return pygame.Rect(pos[0], y, r.right - pos[0], tile + 3)
+    """The wordmark: 'WordBattle' set in Georgia Bold. `tile` sets the cap height (kept for old callers)."""
+    r = draw_text(surface, "WordBattle", serif(int(tile * 1.1)), col.TEXT, (pos[0], pos[1] + tile // 2), "midleft")
+    return pygame.Rect(pos[0], pos[1], r.width, tile)
+
+
+def draw_swatch(surface, color, center, size: int = 12) -> pygame.Rect:
+    """Small solid square marking a player's colour."""
+    rect = pygame.Rect(0, 0, size, size)
+    rect.center = (round(center[0]), round(center[1]))
+    pygame.draw.rect(surface, color, rect)
+    return rect
 
 
 def truncate(fnt: pygame.font.Font, text: str, width: int) -> str:
@@ -177,13 +195,19 @@ def draw_text(surface, text, fnt, color, pos, anchor: str = "topleft", max_width
     return rect
 
 
-def draw_card(surface, rect, fill=None, border=None, radius: int = RADIUS, shadow: bool = True, width: int = 1):
-    """Rounded card with an optional soft drop shadow."""
+def draw_card(surface, rect, fill=None, border=None, radius: int = RADIUS, shadow: bool = False, width: int = 1):
+    """Flat panel: white fill and a hairline border (no shadow unless asked for)."""
+    radius = min(radius, RADIUS)
     if shadow:
         aa_rect(surface, col.SHADOW, rect.move(0, 2), border_radius=radius)
     aa_rect(surface, fill if fill is not None else col.SURFACE, rect, border_radius=radius)
     if border is not False:
         aa_rect(surface, border if border is not None else col.BORDER, rect, width=width, border_radius=radius)
+
+
+def rule(surface, x1: int, x2: int, y: int, width: int = 1, color=None) -> None:
+    """Horizontal printed rule."""
+    pygame.draw.rect(surface, color if color is not None else col.BORDER, (x1, y, x2 - x1, width))
 
 
 def draw_overlay(surface) -> None:
@@ -198,7 +222,7 @@ def draw_tooltip(surface, text: str, pos: Tuple[int, int]) -> None:
     rect = pygame.Rect(0, 0, surf.get_width() + 16, surf.get_height() + 8)
     rect.midbottom = (pos[0], pos[1] - 10)
     rect.clamp_ip(surface.get_rect().inflate(-8, -8))
-    aa_rect(surface, col.TEXT, rect, border_radius=6)
+    aa_rect(surface, col.TEXT, rect, border_radius=RADIUS_SMALL)
     surface.blit(surf, (rect.x + 8, rect.y + 4))
 
 
