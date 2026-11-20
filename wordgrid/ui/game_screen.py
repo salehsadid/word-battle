@@ -138,7 +138,7 @@ class GameScreen:
         # Top bar
         self.btn_help = Button(pygame.Rect(810, 18, 120, 36), "How to play", variant="ghost",
                                callback=self.help.open)
-        self.btn_back = Button(pygame.Rect(940, 18, 120, 36), "Settings", callback=self._ask_leave)
+        self.btn_back = Button(pygame.Rect(940, 18, 120, 36), "Exit", callback=self._ask_leave)
         # Controls under the board
         self.btn_reset = Button(pygame.Rect(40, 656, 140, 44), "Restart", callback=self._ask_restart)
         self.btn_pause = Button(pygame.Rect(190, 656, 120, 44), "Pause", callback=self.toggle_pause)
@@ -207,8 +207,8 @@ class GameScreen:
 
     def _ask_leave(self) -> None:
         if self._in_progress():
-            self.confirm.open("Leave this match?", "The current game will be lost. Your settings are kept.",
-                              "Leave", self.on_back_to_menu)
+            self.confirm.open("Exit this match?", "The current game will be lost. Your settings are kept.",
+                              "Exit", self.on_back_to_menu)
         else:
             self.on_back_to_menu()
 
@@ -550,15 +550,35 @@ class GameScreen:
                         "center", max_width=card.width - 40)
 
         s1, s2 = state.scores.get(1, 0), state.scores.get(2, 0)
+        winner = state.winner if state.winner in (1, 2) else None
         score_font = theme.font(theme.SIZE_TITLE, bold=True)
-        theme.draw_text(surface, f"{s1}", score_font, col.P1, (card.centerx - 30, card.y + 150), "midright")
-        theme.draw_text(surface, "-", score_font, col.TEXT_SUBTLE, (card.centerx, card.y + 150), "center")
-        theme.draw_text(surface, f"{s2}", score_font, col.P2, (card.centerx + 30, card.y + 150), "midleft")
         cap = theme.font(theme.SIZE_CAPTION)
-        theme.draw_text(surface, self.names[1], cap, col.TEXT_MUTED, (card.centerx - 30, card.y + 172), "topright",
-                        max_width=180)
-        theme.draw_text(surface, self.names[2], cap, col.TEXT_MUTED, (card.centerx + 30, card.y + 172), "topleft",
-                        max_width=180)
+        bold = theme.font(theme.SIZE_CAPTION, bold=True)
+        if winner:
+            # Green box around the winner's score and name (sized to its contents)
+            inner = max(score_font.size(str(state.scores.get(winner, 0)))[0],
+                        bold.size(theme.truncate(bold, self.names[winner], 170))[0],
+                        theme.label(11).size("WINNER")[0])
+            box = pygame.Rect(0, 0, inner + 28, 84)
+            if winner == 1:
+                box.topright = (card.centerx - 16, card.y + 116)
+            else:
+                box.topleft = (card.centerx + 16, card.y + 116)
+            theme.aa_rect(surface, col.SUCCESS_SOFT, box, border_radius=theme.RADIUS)
+            theme.aa_rect(surface, col.SUCCESS, box, width=2, border_radius=theme.RADIUS)
+            theme.draw_label(surface, "Winner", (card.centerx - 30 if winner == 1 else card.centerx + 30, box.y + 7),
+                             color=col.SUCCESS_INK, size=11, anchor="topright" if winner == 1 else "topleft")
+        c1 = col.SUCCESS_INK if winner == 1 else col.P1
+        c2 = col.SUCCESS_INK if winner == 2 else col.P2
+        theme.draw_text(surface, f"{s1}", score_font, c1, (card.centerx - 30, card.y + 152), "midright")
+        theme.draw_text(surface, "-", score_font, col.TEXT_SUBTLE, (card.centerx, card.y + 152), "center")
+        theme.draw_text(surface, f"{s2}", score_font, c2, (card.centerx + 30, card.y + 152), "midleft")
+        theme.draw_text(surface, self.names[1], bold if winner == 1 else cap,
+                        col.SUCCESS_INK if winner == 1 else col.TEXT_MUTED, (card.centerx - 30, card.y + 174),
+                        "topright", max_width=170)
+        theme.draw_text(surface, self.names[2], bold if winner == 2 else cap,
+                        col.SUCCESS_INK if winner == 2 else col.TEXT_MUTED, (card.centerx + 30, card.y + 174),
+                        "topleft", max_width=170)
 
         words = self.engine.matched_words
         counts = {pid: sum(1 for m in words if m["player"] == pid) for pid in (1, 2)}
@@ -567,7 +587,7 @@ class GameScreen:
         if words:
             best = max(words, key=lambda m: m["length"])
             lines.append(f"Best word: {best['word']} (+{best['length']}) by {self.names[best['player']]}")
-        y = card.y + 204
+        y = card.y + 214
         for line in lines:
             theme.draw_text(surface, line, cap, col.TEXT_MUTED, (card.centerx, y), "center", max_width=card.width - 40)
             y += 20

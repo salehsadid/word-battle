@@ -88,10 +88,10 @@ class BoardRenderer:
                     continue
 
                 in_word = (r, c) in highlight
-                if (r, c) in flash_cells:
-                    rect = rect.inflate(round(6 * flash_strength), round(6 * flash_strength))  # brief "pop"
                 if in_word:
                     face, edge, ink = col.SUCCESS, col.SUCCESS, col.TEXT_ON_ACCENT
+                    if (r, c) in flash_cells:  # a just-scored word starts darker and fades to green (no size change)
+                        face = edge = col.SUCCESS.lerp(col.SUCCESS_INK, 0.6 * flash_strength)
                 elif is_last:
                     face, edge, ink = col.AMBER, col.AMBER, col.TEXT
                 else:
@@ -99,5 +99,6 @@ class BoardRenderer:
                 pygame.draw.rect(surface, face, rect)
                 pygame.draw.rect(surface, edge, rect, 2)
                 if is_last and in_word:
-                    pygame.draw.rect(surface, col.AMBER, rect, 4)
+                    # Yellow ring drawn just outside the tile, so the tile and its letter keep their size
+                    pygame.draw.rect(surface, col.AMBER, rect.inflate(4, 4), 3)
                 theme.draw_text(surface, letter, tile_font, ink, (rect.centerx, rect.centery + 1), "center")

@@ -5,7 +5,7 @@ import threading
 import pygame
 from pathlib import Path
 from typing import Optional, Dict
-from wordgrid.config import UIConfig, DATA_DIR, CLEANED_DICT_PATH
+from wordgrid.config import UIConfig, CLEANED_DICT_PATH, RESULTS_DIR, APP_ICON_PATH
 from wordgrid.game.engine import GameEngine
 from wordgrid.dictionary.loader import DictionaryLoader
 from wordgrid.dictionary.word_validator import WordValidator
@@ -47,6 +47,10 @@ class UIRunner:
         _prepare_display()
         pygame.init()
         pygame.display.set_caption("WordBattle - Strategic Word Grid")
+        try:
+            pygame.display.set_icon(pygame.image.load(str(APP_ICON_PATH)))
+        except (pygame.error, FileNotFoundError):
+            pass
 
         size = (self.config.window_width, self.config.window_height)
         try:
@@ -177,7 +181,7 @@ class UIRunner:
                 )
                 matches, stats = runner.run_tournament(agents, games_per_pairing=2)
 
-                out_dir = DATA_DIR / "tournament_results"
+                out_dir = RESULTS_DIR
                 ResultsExporter.export_to_json(matches, stats, out_dir / "results.json")
                 ResultsExporter.export_to_csv(stats, out_dir / "results.csv")
                 self.tournament_summary_text = ResultsExporter.format_summary_table(stats)
@@ -257,7 +261,8 @@ class UIRunner:
             for line in self.tournament_summary_text.splitlines():
                 self.screen.blit(self.mono_font.render(line, True, col.TEXT), (card.x + 32, y))
                 y += 26
-            theme.draw_text(self.screen, "Saved to data/tournament_results/ (results.json, results.csv)",
-                            theme.font(theme.SIZE_CAPTION), col.SUCCESS, (card.x + 32, y + 16))
+            theme.draw_text(self.screen, f"Saved to {RESULTS_DIR} (results.json, results.csv)",
+                            theme.font(theme.SIZE_CAPTION), col.SUCCESS, (card.x + 32, y + 16),
+                            max_width=card.width - 64)
 
         self.btn_tourney_back.render(self.screen)

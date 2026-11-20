@@ -27,23 +27,18 @@ def friendly_ai_text(stats: Dict[str, Any], name: str, opponent: str) -> str:
     word = stats.get("word")
     points = stats.get("immediate_score", 0)
     denied = stats.get("denied_points", 0)
-    reply = stats.get("opponent_best_reply")
     if word:
         text = f"{name} played {ch} at {where}, making {word} for +{points}."
     elif denied:
         text = f"{name} placed {ch} at {where} to block a square worth up to +{denied}."
     else:
         text = f"{name} placed {ch} at {where}. No word this turn."
-    if "opponent_best_reply" in stats and "ends the match" not in stats.get("explanation", ""):
-        if reply:
-            text += f" {opponent} can answer with up to +{reply}."
-        else:
-            text += f" {opponent} has no scoring reply right now."
     return text
 
 
 def ai_details_text(stats: Dict[str, Any]) -> str:
-    parts = [stats.get("algorithm", "AI"), f"{stats.get('elapsed_time', 0.0) * 1000:,.0f} ms"]
+    # The panel title already names the AI, so the line starts with the numbers
+    parts = [f"{stats.get('elapsed_time', 0.0) * 1000:,.0f} ms"]
     if "nodes_visited" in stats:
         parts.append(f"{stats['nodes_visited']:,} positions")
         if stats.get("cutoffs"):
@@ -51,7 +46,7 @@ def ai_details_text(stats: Dict[str, Any]) -> str:
     elif "simulations" in stats:
         parts.append(f"{stats['simulations']:,} simulations")
     if "win_probability" in stats:
-        parts.append(f"win estimate {stats['win_probability']:.0%}")
+        parts.append(f"win chance {stats['win_probability']:.0%}")
     return "  ·  ".join(parts)
 
 

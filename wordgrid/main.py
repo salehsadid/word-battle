@@ -2,12 +2,12 @@ import argparse
 from pathlib import Path
 from wordgrid.config import (
     GameConfig,
-    DATA_DIR,
     ALL_GAME_MODES,
     CLEANED_DICT_PATH,
     MIN_BOARD_SIZE,
     MAX_BOARD_SIZE,
     DEFAULT_BOARD_SIZE,
+    RESULTS_DIR,
 )
 from wordgrid.dictionary.loader import DictionaryLoader
 from wordgrid.game.engine import GameEngine
@@ -76,7 +76,7 @@ def run_cli_tournament(args):
     print(ResultsExporter.format_summary_table(agent_stats))
     print("-" * 60)
 
-    out_dir = DATA_DIR / "tournament_results"
+    out_dir = RESULTS_DIR
     json_path = out_dir / "results.json"
     csv_path = out_dir / "results.csv"
     ResultsExporter.export_to_json(matches, agent_stats, json_path)

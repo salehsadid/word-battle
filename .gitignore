@@ -60,3 +60,17 @@ data/raw_words.txt
 # Presentation decks (and PowerPoint lock files)
 *.pptx
 ~$*
+
+# Local handoff notes for Claude Code sessions
+PROJECT_NOTES.md
+
+# One-click executable (built by scripts/build_exe.py)
+WordBattle.exe
+*.spec
+
+# Course deliverables kept out of git (report, gameplay video)
+report/
+*.mp4
+
+# Benchmark output written next to the .exe
+/tournament_results/

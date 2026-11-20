@@ -7,7 +7,6 @@ from wordgrid.ui import theme
 from wordgrid.ui.backdrop import draw_backdrop
 from wordgrid.ui.controls import (
     Button,
-    OptionSelector,
     SegmentedControl,
     Slider,
     Stepper,
@@ -25,6 +24,7 @@ from wordgrid.config import (
     MIN_BOARD_SIZE,
     MAX_BOARD_SIZE,
     DEFAULT_BOARD_SIZE,
+    DIFFICULTY_PRESETS,
 )
 from wordgrid.settings import (
     MatchSettings,
@@ -36,7 +36,6 @@ from wordgrid.settings import (
     CONTROLLER_MINIMAX,
     CONTROLLER_MCTS,
     DIFFICULTY_CUSTOM,
-    available_dictionaries,
 )
 
 # Presets used by tests and shortcuts: (player 1 human?, player 2 human?)
@@ -60,10 +59,10 @@ COL_W = 418
 PANEL_Y = 158
 PANEL_H = 240
 SEG_Y, ROW1_Y, ROW2_Y = 40, 120, 198   # control offsets inside a player column (captions sit 22 px above)
-RULE_Y = 420
+RULE_Y = 432
 FORM_LABEL_X = 92
 FORM_X, FORM_W = 300, 440
-FORM_ROWS_Y = (466, 520, 574)          # board size / game ends / first move
+FORM_ROWS_Y = (478, 532, 586)          # board size / game ends / first move
 
 
 class _PlayerPanel:
@@ -108,7 +107,6 @@ class MenuScreen:
     ):
         self.on_start_match = on_start_match
         self.on_start_tournament = on_start_tournament
-        self.dictionaries = available_dictionaries()
         self.help = HelpOverlay()
         self.advanced_open = False
         self.errors: List[str] = []
@@ -168,7 +166,7 @@ class MenuScreen:
         refresh = lambda *a: self._refresh()
         self.override = {CONTROLLER_MINIMAX: False, CONTROLLER_MCTS: False}
         self.adv_card = pygame.Rect(150, 60, 800, 640)
-        self.seg_adv_tab = UnderlineTabs(r, ["Rules", "Minimax", "MCTS", "Display"], 0)
+        self.seg_adv_tab = UnderlineTabs(r, ["General", "Minimax", "MCTS"], 0)
 
         def set_override(ctrl):
             def _f(value):
@@ -178,10 +176,6 @@ class MenuScreen:
 
         self.step_minlen = Stepper(r, d.min_word_length, 2, 5, 1, on_change=refresh,
                                    fmt=lambda v: f"{v:g} letters")
-        labels = [label for label, _ in self.dictionaries] or ["Standard English"]
-        self.sel_dict = OptionSelector(r, "", labels, 0, on_change=refresh)
-        self.inp_seed = TextInput(r, text="", kind="int", max_chars=10, placeholder="Empty = different every game",
-                                  on_change=lambda t: self._refresh())
 
         self.tog_mm_custom = Toggle(r, False, on_change=set_override(CONTROLLER_MINIMAX))
         self.step_depth = Stepper(r, d.minimax_depth, 1, 5, 1, on_change=refresh,
@@ -193,7 +187,6 @@ class MenuScreen:
         self.sl_w_score = Slider(r, w.score_diff, 0, 3, 0.1, on_change=refresh)
         self.sl_w_own = Slider(r, w.own_future_potential, 0, 3, 0.1, on_change=refresh)
         self.sl_w_opp = Slider(r, w.opponent_future_potential, 0, 3, 0.1, on_change=refresh)
-        self.sl_w_prefix = Slider(r, w.partial_sequence_bonus, 0, 3, 0.1, on_change=refresh)
         self.sl_w_space = Slider(r, w.playable_space_factor, 0, 3, 0.1, on_change=refresh)
 
         self.tog_mc_custom = Toggle(r, False, on_change=set_override(CONTROLLER_MCTS))
@@ -220,8 +213,10 @@ class MenuScreen:
         if tab == 0:
             return [
                 ("Minimum word length", "Shorter words never score. Limited by the board size.", self.step_minlen),
-                ("Dictionary", "Word lists found in the data folder.", self.sel_dict),
-                ("Random seed", "Same number = the AIs repeat the same choices.", self.inp_seed),
+                ("Display", "", None),
+                ("Explain AI moves", "A short sentence after every AI move.", self.tog_explain),
+                ("Show technical details", "Search time, positions examined, win estimate.", self.tog_details),
+                ("Pause between AI moves", "Gives you time to follow the game.", self.step_delay),
             ]
         if tab == 1:
             custom = self.override[CONTROLLER_MINIMAX]
@@ -237,26 +232,19 @@ class MenuScreen:
                 ("Value of its current lead", "", self.sl_w_score),
                 ("Eagerness to score next turn", "", self.sl_w_own),
                 ("Caution about your threats", "", self.sl_w_opp),
-                ("Interest in open letter runs", "", self.sl_w_prefix),
                 ("Endgame urgency", "", self.sl_w_space),
             ]
-        if tab == 2:
-            custom = self.override[CONTROLLER_MCTS]
-            for wdg in (self.step_iter, self.step_rollout, self.step_children):
-                wdg.enabled = custom
-            return [
-                ("Use custom search settings", "Off = follow the difficulty chosen on the main screen.",
-                 self.tog_mc_custom),
-                ("Simulated games per move", "More is stronger but slower.", self.step_iter),
-                ("Playout length", "Moves played in each simulated game.", self.step_rollout),
-                ("Moves explored per position", "'All' spreads the search thin.", self.step_children),
-                ("Playing style (applies to every difficulty)", "", None),
-                ("Curiosity (exploration constant)", "Higher tries more unusual moves.", self.sl_c),
-            ]
+        custom = self.override[CONTROLLER_MCTS]
+        for wdg in (self.step_iter, self.step_rollout, self.step_children):
+            wdg.enabled = custom
         return [
-            ("Explain AI moves", "A short sentence after every AI move.", self.tog_explain),
-            ("Show technical details", "Search time, positions examined, win estimate.", self.tog_details),
-            ("Pause between AI moves", "Gives you time to follow the game.", self.step_delay),
+            ("Use custom search settings", "Off = follow the difficulty chosen on the main screen.",
+             self.tog_mc_custom),
+            ("Simulated games per move", "More is stronger but slower.", self.step_iter),
+            ("Playout length", "Moves played in each simulated game.", self.step_rollout),
+            ("Moves explored per position", "'All' spreads the search thin.", self.step_children),
+            ("Playing style (applies to every difficulty)", "", None),
+            ("Curiosity (exploration constant)", "Higher tries more unusual moves.", self.sl_c),
         ]
 
     def _layout_advanced(self):
@@ -290,7 +278,6 @@ class MenuScreen:
 
     def _close_advanced(self) -> None:
         self.advanced_open = False
-        self.inp_seed.focused = False
         self._refresh()
 
     def _reset_advanced(self) -> None:
@@ -312,15 +299,6 @@ class MenuScreen:
     def build_settings(self) -> Tuple[MatchSettings, List[str]]:
         """Settings described by the screen, plus every problem found."""
         problems: List[str] = []
-        seed_text = self.inp_seed.text.strip()
-        seed = None
-        self.inp_seed.error = False
-        if seed_text:
-            try:
-                seed = int(seed_text)
-            except ValueError:
-                self.inp_seed.error = True
-                problems.append("The random seed must be a whole number (or left empty).")
 
         sides = []
         for panel in self.panels:
@@ -336,8 +314,6 @@ class MenuScreen:
         match_type = {2: MATCH_HUMAN_VS_HUMAN, 1: MATCH_HUMAN_VS_AI, 0: MATCH_AI_VS_AI}[humans]
         start = [1, 2, 0][self.seg_first.index]
 
-        defaults = MatchSettings()
-        dict_path = self.dictionaries[self.sel_dict.index][1] if self.dictionaries else defaults.dictionary_path
         settings = MatchSettings(
             match_type=match_type,
             board_size=MIN_BOARD_SIZE + self.seg_board.index,
@@ -346,7 +322,6 @@ class MenuScreen:
             goal_score=int(self.step_goal.value),
             move_limit=int(self.step_limit.value),
             min_word_length=int(self.step_minlen.value),
-            dictionary_path=dict_path,
             p1=p1,
             p2=p2,
             minimax_depth=int(self.step_depth.value),
@@ -356,14 +331,12 @@ class MenuScreen:
                 score_diff=self.sl_w_score.value,
                 own_future_potential=self.sl_w_own.value,
                 opponent_future_potential=self.sl_w_opp.value,
-                partial_sequence_bonus=self.sl_w_prefix.value,
                 playable_space_factor=self.sl_w_space.value,
             ),
             mcts_iterations=int(self.step_iter.value),
             mcts_c=self.sl_c.value,
             mcts_rollout_depth=int(self.step_rollout.value),
             mcts_max_children=int(self.step_children.value),
-            seed=seed,
             show_ai_explanations=self.tog_explain.value,
             show_ai_details=self.tog_details.value,
             ai_move_delay=self.step_delay.value,
@@ -409,9 +382,8 @@ class MenuScreen:
             self.on_start_match(settings)
 
     def _handle_tournament_click(self) -> None:
-        settings, problems = self.build_settings()
-        if not any("seed" in p for p in problems):
-            self.on_start_tournament(settings)
+        settings, _ = self.build_settings()
+        self.on_start_tournament(settings)
 
     # ================================================================== events
     def _main_widgets(self):
@@ -424,7 +396,7 @@ class MenuScreen:
 
     def _visible_inputs(self) -> List[TextInput]:
         if self.advanced_open:
-            return [self.inp_seed] if self.seg_adv_tab.index == 0 else []
+            return []
         return [p.inp_name for p in self.panels if p.is_human]
 
     def handle_event(self, event: pygame.event.Event) -> None:
@@ -443,7 +415,7 @@ class MenuScreen:
             return
 
         if self.advanced_open:
-            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE and not self.inp_seed.focused:
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                 self._close_advanced()
                 return
             if event.type == pygame.MOUSEBUTTONDOWN and not self.adv_card.collidepoint(event.pos):
@@ -451,7 +423,6 @@ class MenuScreen:
                 return
             self._layout_advanced()
             if self.seg_adv_tab.handle_event(event):
-                self.inp_seed.focused = False
                 return
             for btn in (self.btn_adv_close, self.btn_adv_reset, self.btn_adv_done):
                 if btn.handle_event(event):
@@ -513,6 +484,30 @@ class MenuScreen:
         else:
             self._render_field(surface, "Algorithm", panel.seg_algo)
             self._render_field(surface, "Level", panel.seg_diff)
+            theme.draw_text(surface, self._level_summary(panel), theme.font(13), col.TEXT_SUBTLE,
+                            (panel.seg_diff.rect.x, panel.seg_diff.rect.bottom + 6), max_width=COL_W)
+
+    def _level_summary(self, panel: _PlayerPanel) -> str:
+        """What the chosen level means for this algorithm (custom values when Advanced options override it)."""
+        custom = self.override[panel.controller]
+        if panel.controller == CONTROLLER_MINIMAX:
+            if custom:
+                depth, k = int(self.step_depth.value), int(self.step_k.value)
+            else:
+                p = DIFFICULTY_PRESETS[panel.seg_diff.value]["minimax"]
+                depth, k = p["depth"], p["candidate_k"]
+            text = (f"Look-ahead: {depth} {'move' if depth == 1 else 'moves'}  ·  "
+                    f"Options compared: {'all' if k == 0 else k}")
+        else:
+            if custom:
+                sims, playout, explored = (int(self.step_iter.value), int(self.step_rollout.value),
+                                           int(self.step_children.value))
+            else:
+                p = DIFFICULTY_PRESETS[panel.seg_diff.value]["mcts"]
+                sims, playout, explored = p["iterations"], p["rollout_depth"], p["max_children"]
+            text = (f"Simulations: {sims:,}  ·  Playout length: {playout}  ·  "
+                    f"Moves explored: {'all' if explored == 0 else explored}")
+        return ("Custom  ·  " + text) if custom else text
 
     @staticmethod
     def _render_field(surface: pygame.Surface, caption: str, widget) -> None:

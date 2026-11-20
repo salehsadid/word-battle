@@ -19,6 +19,19 @@ pytest -q                          # 89 automated tests
 
 The game is fully offline. The dictionary lives in `data/cleaned_words.txt`.
 
+### One-click executable (Windows)
+
+`WordBattle.exe` runs the game with a double-click, with no Python installation needed. It is built from the
+source and is not stored in git:
+
+```bash
+pip install pyinstaller
+python scripts/build_exe.py        # writes WordBattle.exe to the project root (about 22 MB)
+```
+
+The first start takes a few seconds while the bundled files unpack. Results of the in-game AI benchmark are saved
+in a `tournament_results` folder next to the `.exe`.
+
 ### Command line (optional)
 
 ```bash
@@ -41,14 +54,13 @@ Run `python main.py --help` for every option (`--min-len`, `--dict`, `--goal-sco
 1. **Set up the match.** For **Player 1** and **Player 2**, choose *Human* (enter a name) or
    *Computer* (pick **Minimax** or **MCTS** and a level: Easy, Medium, Hard, Expert). Two humans,
    human vs computer and computer vs computer all work from the same screen. Below that, choose
-   the board size, how the game ends (fill the board, reach a score, or a move limit) and who
+   the board size (4×4 to 8×8), how the game ends (fill the board, reach a score, or a move limit) and who
    moves first. Numbers use − / + steppers, so they can't be out of range. *Start game* stays
    disabled, with a short message beside it, until the setup is valid.
 2. **Advanced options (optional).** A separate sheet with tabs:
-   - *Rules*: minimum word length, dictionary, random seed.
+   - *General*: minimum word length, AI explanations, technical details, pause between AI moves.
    - *Minimax*: custom depth, breadth, pruning and playing-style sliders (the heuristic weights).
    - *MCTS*: custom simulations, playout length, breadth, exploration constant.
-   - *Display*: AI explanations, technical details, pause between AI moves.
    - *Reset to recommended* restores the defaults.
 3. **Your turn.** Click an empty square and a letter panel appears next to it. Click a letter,
    or just type it. Arrow keys move the selection and Esc cancels.
@@ -64,10 +76,10 @@ Run `python main.py --help` for every option (`--min-len`, `--dict`, `--goal-sco
      (including moves that score nothing). Hover an entry to light it up on the board.
    - The newest letter is yellow and the last scored word is green. A short message such as
      "DAMP +4" confirms each move. Hover a square for its row and column.
-5. **Controls:** **Restart** and **Settings** ask for confirmation mid-game. In AI vs AI,
+5. **Controls:** **Restart** and **Exit** (back to the home screen) ask for confirmation mid-game. In AI vs AI,
    **Pause/Resume** (Space) and **Step** (Enter) let you follow move by move. **How to play**
    (F1 or ?) opens the guide.
-6. **End of match:** a result card shows the winner or draw, the final score, why it ended,
+6. **End of match:** a result card shows the winner (highlighted in green) or a draw, the final score, why it ended,
    words per player and the best word. Buttons: **Play again**, **Change settings**, **View board**.
 
 The interface follows a flat newspaper-puzzle style: white sheets on paper, black text, square
@@ -172,7 +184,6 @@ consider first.
   - `own_future_potential`: the best immediate score available to us when we are to move.
   - `opponent_future_potential`: the opponent's best immediate reply, i.e. the concrete threat,
     such as finishing `PANT` after we wrote `PAN`.
-  - `partial_sequence_bonus`: open letter runs that are prefixes of words in either direction.
   - `playable_space_factor`: a lead is worth more as the board fills or the move limit nears.
   - Termination awareness: large bonus/penalty when the side to move can reach the target score.
   - Terminal positions: ±10000 plus margin. The evaluation is also mapped to a win estimate for display.

@@ -147,7 +147,7 @@ class MatchSettings:
         if not (0 <= self.candidate_k <= 200):
             errors.append("Candidate breadth must be between 0 (all moves) and 200.")
         for wname in ("score_diff", "own_future_potential", "opponent_future_potential",
-                      "partial_sequence_bonus", "playable_space_factor"):
+                      "playable_space_factor"):
             val = getattr(self.weights, wname)
             if not (0.0 <= val <= 10.0):
                 errors.append(f"Heuristic weight '{wname}' must be between 0 and 10.")

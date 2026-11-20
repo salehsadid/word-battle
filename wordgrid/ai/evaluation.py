@@ -15,7 +15,6 @@ class HeuristicEvaluator:
         (only when the root player is the one to move).
       - opponent_future_potential: best points the opponent can take on its next move
         (the concrete *threat*, e.g. finishing PANT after we wrote PAN).
-      - partial_sequence_bonus: open letter runs that are dictionary prefixes (longer-term potential).
       - playable_space_factor: the lead weighs more as the board fills up.
     Terminal states return a large win/loss value plus the final margin.
     """
@@ -41,47 +40,6 @@ class HeuristicEvaluator:
         else:
             return self.TERMINAL_DRAW + score_diff
 
-    def estimate_line_potentials(
-        self,
-        line: list,
-        validator: WordValidatorProtocol,
-    ) -> Tuple[float, float]:
-        """Estimates incomplete sequence potential along a 1D line of board cells.
-
-        A run counts when it can still grow (an adjacent empty cell) and it is a dictionary
-        prefix in either reading direction.
-
-        Returns:
-            (promising_prefix_potential, partial_sequence_count)
-        """
-        has_prefix = hasattr(validator, "is_valid_prefix")
-        if not has_prefix:
-            return 0.0, 0.0
-        n = len(line)
-        potential = 0.0
-        partial_count = 0.0
-
-        i = 0
-        while i < n:
-            if line[i] is not None:
-                start = i
-                while i < n and line[i] is not None:
-                    i += 1
-                end = i
-                seq = "".join(line[start:end])
-                k = len(seq)
-                open_after = end < n and line[end] is None
-                open_before = start > 0 and line[start - 1] is None
-                fwd = open_after and validator.is_valid_prefix(seq)
-                rev = open_before and validator.is_valid_prefix(seq[::-1])
-                if fwd or rev:
-                    potential += (k + (1 if fwd else 0) + (1 if rev else 0)) * 0.25
-                    partial_count += 1.0
-            else:
-                i += 1
-
-        return potential, partial_count
-
     def features(
         self,
         state: GameState,
@@ -90,17 +48,6 @@ class HeuristicEvaluator:
     ) -> Dict[str, float]:
         """Raw (unweighted) feature values, exposed for explanations and tests."""
         board = state.board
-        total_potential = 0.0
-        total_partials = 0.0
-        for r in range(board.size):
-            p, count = self.estimate_line_potentials(board.grid[r], validator)
-            total_potential += p
-            total_partials += count
-        for c in range(board.size):
-            p, count = self.estimate_line_potentials([board.grid[r][c] for r in range(board.size)], validator)
-            total_potential += p
-            total_partials += count
-
         threat = float(self.scanner.best_immediate_score(state, validator))
         to_move_is_root = state.current_player == root_player
 
@@ -111,8 +58,6 @@ class HeuristicEvaluator:
             "score_diff": float(state.get_score_difference(root_player)),
             "own_next": threat if to_move_is_root else 0.0,
             "opp_next": 0.0 if to_move_is_root else threat,
-            "prefix_potential": total_potential if to_move_is_root else -total_potential,
-            "partials": total_partials,
             "filled_ratio": 1.0 - horizon_ratio,
         }
 
@@ -134,7 +79,6 @@ class HeuristicEvaluator:
             w.score_diff * score_diff
             + w.own_future_potential * f["own_next"]
             - w.opponent_future_potential * f["opp_next"]
-            + w.partial_sequence_bonus * 0.5 * f["prefix_potential"]
             + w.playable_space_factor * score_diff * f["filled_ratio"]
         )
 

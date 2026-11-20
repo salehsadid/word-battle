@@ -29,6 +29,7 @@ P2 = C("#D9483B")             # red
 P2_SOFT = C("#FBEAE8")
 SUCCESS = C("#6AAA64")        # scored words
 SUCCESS_SOFT = C("#E3F1E1")
+SUCCESS_INK = C("#2E6B2A")     # readable green text on SUCCESS_SOFT
 AMBER = C("#F7DA21")          # newest letter
 AMBER_SOFT = C("#FDF5C7")
 DANGER = C("#C9372C")

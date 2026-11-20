@@ -30,7 +30,7 @@ def test_settings_screen_modes_and_advanced_tabs(ui):
             menu.render(ui.screen)
             assert menu.errors == []
     menu.advanced_open = True
-    for tab in range(4):
+    for tab in range(3):
         menu.seg_adv_tab.index = tab
         menu.render(ui.screen)
     menu.advanced_open = False
@@ -53,7 +53,7 @@ def test_invalid_name_blocks_start(ui):
 def test_two_player_match_with_picker_confirm_and_result(ui):
     menu = ui.menu_screen
     menu._set_mode(MODE_TWO_PLAYERS)
-    menu.seg_board.set_value("3×3")
+    menu.seg_board.set_value("4×4")
     menu._refresh()
     menu._handle_start_click()
     game = ui.game_screen
@@ -74,8 +74,8 @@ def test_two_player_match_with_picker_confirm_and_result(ui):
     game.confirm.close()
 
     # Fill the board by keyboard and reach the result card
-    for r in range(3):
-        for c in range(3):
+    for r in range(4):
+        for c in range(4):
             if game.engine.state.board.grid[r][c] is None:
                 game._select_cell((r, c))
                 game.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_x, unicode="x", mod=0))

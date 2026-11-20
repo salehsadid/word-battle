@@ -1,3 +1,4 @@
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Any, List
@@ -10,6 +11,11 @@ CLEANED_DICT_PATH = DATA_DIR / "cleaned_words.txt"
 TEST_DICT_PATH = DATA_DIR / "test_words.txt"
 ASSETS_DIR = Path(__file__).resolve().parent / "assets"
 MENU_BACKGROUND_PATH = ASSETS_DIR / "images" / "paper_background.png"  # built by scripts/make_paper_background.py
+APP_ICON_PATH = ASSETS_DIR / "images" / "app_icon.png"
+# In the packaged .exe (scripts/build_exe.py) bundled files live in a temporary folder, so benchmark
+# results are written next to the .exe instead, where they are kept.
+IS_FROZEN = getattr(sys, "frozen", False)
+RESULTS_DIR = (Path(sys.executable).resolve().parent if IS_FROZEN else DATA_DIR) / "tournament_results"
 
 # Game Modes (termination conditions)
 MODE_UNTIL_BOARD_FULL = "UNTIL_BOARD_FULL"
@@ -29,7 +35,7 @@ MODE_LABELS = {
 }
 
 # Board limits
-MIN_BOARD_SIZE = 3
+MIN_BOARD_SIZE = 4
 MAX_BOARD_SIZE = 8
 DEFAULT_BOARD_SIZE = 8
 
@@ -67,7 +73,6 @@ class HeuristicWeights:
     score_diff: float = 1.0                 # Points already banked (own - opponent)
     own_future_potential: float = 0.6       # Best immediate score available to root player next turn
     opponent_future_potential: float = 0.8  # Best immediate score the opponent could take (threat)
-    partial_sequence_bonus: float = 0.2     # Promising open letter sequences (dictionary prefixes)
     playable_space_factor: float = 0.1      # Lead matters more as empty cells run out
 
 
