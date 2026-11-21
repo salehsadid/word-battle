@@ -21,55 +21,52 @@ DIRECTION_LABELS = {
 ScoredWord = Tuple[str, int, OccurrenceKey]
 
 
+# Human readable reading direction for an occurrence key.
 def direction_label(key: Optional[OccurrenceKey]) -> str:
-    """Human readable reading direction for an occurrence key."""
     if not key:
         return "-"
     return DIRECTION_LABELS.get(key[0], key[0])
 
 
+# Returns the board cells covered by an occurrence key.
 def occurrence_cells(key: OccurrenceKey) -> List[Tuple[int, int]]:
-    """Returns the board cells covered by an occurrence key."""
     orient, r1, c1, r2, c2 = key
     if orient.startswith("H"):
         return [(r1, c) for c in range(c1, c2 + 1)]
     return [(r, c1) for r in range(r1, r2 + 1)]
 
 
+# Protocol for checking word validity.
 class WordValidatorProtocol(Protocol):
-    """Protocol for checking word validity."""
+    # True if the word is in the dictionary.
     def is_valid_word(self, word: str) -> bool:
         ...
 
 
+# Authoritative scoring engine for WordGrid.
+#
+# Rules implemented:
+#   - Only contiguous horizontal and vertical letter runs through the placed cell are examined.
+#     Diagonals are never examined.
+#   - Every contiguous sub-segment containing the placed cell is a candidate, read in both
+#     directions (left-to-right, right-to-left, top-to-bottom, bottom-to-top).
+#   - A candidate is eligible when it meets the minimum length, is in the dictionary and has
+#     not already been scored earlier in the match (by either player).
+#   - Only the single longest eligible word is selected and scored; shorter words formed by the
+#     same move stay available for later moves.
+#   - Ties between equally long words are broken deterministically by direction
+#     (H, HR, V, VR), then by top-most / left-most start cell.
+#   - The move earns points equal to the selected word's length, or 0 if nothing is eligible.
 class ScoringSystem:
-    """Authoritative scoring engine for WordGrid.
 
-    Rules implemented:
-      - Only contiguous horizontal and vertical letter runs through the placed cell are examined.
-        Diagonals are never examined.
-      - Every contiguous sub-segment containing the placed cell is a candidate, read in both
-        directions (left-to-right, right-to-left, top-to-bottom, bottom-to-top).
-      - A candidate is eligible when it meets the minimum length, is in the dictionary and has
-        not already been scored earlier in the match (by either player).
-      - Only the single longest eligible word is selected and scored; shorter words formed by the
-        same move stay available for later moves.
-      - Ties between equally long words are broken deterministically by direction
-        (H, HR, V, VR), then by top-most / left-most start cell.
-      - The move earns points equal to the selected word's length, or 0 if nothing is eligible.
-    """
-
+    # Words shorter than min_word_length never score.
     def __init__(self, min_word_length: int = 2):
         self.min_word_length = min_word_length
 
+    # Finds the maximal contiguous horizontal and vertical letter sequences passing through (row, col).
     def inspect_sequences(
         self, board: Board, row: int, col: int
     ) -> Tuple[Tuple[str, OccurrenceKey], Tuple[str, OccurrenceKey]]:
-        """Finds the maximal contiguous horizontal and vertical letter sequences passing through (row, col).
-
-        Returns:
-            ((h_word, h_occurrence_key), (v_word, v_occurrence_key))
-        """
         left_col, right_col = self._horizontal_bounds(board, row, col)
         h_word = "".join(board.grid[row][c] for c in range(left_col, right_col + 1))
         h_key: OccurrenceKey = ("H", row, left_col, row, right_col)
@@ -80,6 +77,7 @@ class ScoringSystem:
 
         return (h_word, h_key), (v_word, v_key)
 
+    # First and last column of the letter run through (row, col).
     @staticmethod
     def _horizontal_bounds(board: Board, row: int, col: int) -> Tuple[int, int]:
         grid = board.grid
@@ -91,6 +89,7 @@ class ScoringSystem:
             right_col += 1
         return left_col, right_col
 
+    # First and last row of the letter run through (row, col).
     @staticmethod
     def _vertical_bounds(board: Board, row: int, col: int) -> Tuple[int, int]:
         grid = board.grid
@@ -102,16 +101,13 @@ class ScoringSystem:
             bottom_row += 1
         return top_row, bottom_row
 
+    # Finds dictionary words in `run` that contain index `pos`, in both reading directions.
     def _scan_run(
         self,
         run: List[str],
         pos: int,
         validator: WordValidatorProtocol,
     ) -> List[Tuple[str, int, int, bool]]:
-        """Finds dictionary words in `run` that contain index `pos`, in both reading directions.
-
-        Returns a list of (word, start_idx, end_idx, reversed) with indices into `run`.
-        """
         n = len(run)
         found: List[Tuple[str, int, int, bool]] = []
         if n < self.min_word_length:
@@ -134,6 +130,7 @@ class ScoringSystem:
                             found.append((word, i, j, False))
         return found
 
+    # Every dictionary word (any direction) containing (row, col), ignoring match history.
     def find_candidates(
         self,
         board: Board,
@@ -141,7 +138,6 @@ class ScoringSystem:
         col: int,
         validator: WordValidatorProtocol,
     ) -> List[ScoredWord]:
-        """Every dictionary word (any direction) containing (row, col), ignoring match history."""
         candidates: List[ScoredWord] = []
 
         left_col, right_col = self._horizontal_bounds(board, row, col)
@@ -158,12 +154,13 @@ class ScoringSystem:
 
         return candidates
 
+    # Sort key implementing the documented tie-breaking rule (smaller sorts first).
     @staticmethod
     def selection_key(item: ScoredWord) -> Tuple[int, int, int, int]:
-        """Sort key implementing the documented tie-breaking rule (smaller sorts first)."""
         word, length, key = item
         return (-length, DIRECTION_PRIORITY.get(key[0], 9), key[1], key[2])
 
+    # Evaluates scoring for a letter already placed at (row, col).
     def evaluate_move(
         self,
         board: Board,
@@ -174,12 +171,6 @@ class ScoringSystem:
         scored_words: Optional[Set[str]] = None,
         blocked_collector: Optional[List[str]] = None,
     ) -> Tuple[int, List[ScoredWord]]:
-        """Evaluates scoring for a letter already placed at (row, col).
-
-        Returns:
-            move_score: length of the selected word (or 0).
-            newly_scored: [] or a single-element list [(word, length, occurrence_key)].
-        """
         if scored_words is None:
             scored_words = set()
 

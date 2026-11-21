@@ -1,4 +1,4 @@
-"""Reusable UI controls in the flat puzzle-paper theme."""
+# Reusable UI controls in the flat puzzle-paper theme.
 
 import time
 import pygame
@@ -7,8 +7,8 @@ from wordgrid.ui import colors as col
 from wordgrid.ui import theme
 
 
+# Greedy word wrap; the last line is ellipsised when max_lines is exceeded.
 def wrap_text(font: pygame.font.Font, text: str, width: int, max_lines: int = 0) -> List[str]:
-    """Greedy word wrap; the last line is ellipsised when max_lines is exceeded."""
     lines: List[str] = []
     current = ""
     for word in text.split():
@@ -26,13 +26,15 @@ def wrap_text(font: pygame.font.Font, text: str, width: int, max_lines: int = 0)
     return lines
 
 
+# True if the mouse is over the rectangle.
 def _hovered(rect: pygame.Rect) -> bool:
     return rect.collidepoint(pygame.mouse.get_pos())
 
 
+# Rounded button. Variants: primary, secondary, ghost, danger. Optional vector icon.
 class Button:
-    """Rounded button. Variants: primary, secondary, ghost, danger. Optional vector icon."""
 
+    # Create a button with its text, style and click action.
     def __init__(
         self,
         rect: pygame.Rect,
@@ -55,10 +57,12 @@ class Button:
         self.visible = True
         self.tooltip = tooltip
 
+    # True if the button is usable and the mouse is over it.
     @property
     def is_hovered(self) -> bool:
         return self.visible and self.enabled and _hovered(self.rect)
 
+    # Run the click action on a left click; returns True if handled.
     def handle_event(self, event: pygame.event.Event) -> bool:
         if not (self.enabled and self.visible):
             return False
@@ -68,6 +72,7 @@ class Button:
             return True
         return False
 
+    # Fill, border and text colours for the current state.
     def _colors(self):
         hover = self.is_hovered
         if not self.enabled:
@@ -80,6 +85,7 @@ class Button:
             return (col.SURFACE_ALT if hover else None), None, col.TEXT
         return (col.SURFACE_ALT if hover else col.SURFACE), col.TEXT, col.TEXT
 
+    # Draw the button.
     def render(self, surface: pygame.Surface) -> None:
         if not self.visible:
             return
@@ -103,9 +109,10 @@ class Button:
             surface.blit(text_surf, text_surf.get_rect(midleft=(x, self.rect.centery)))
 
 
+# A row of mutually exclusive options, all visible at once.
 class SegmentedControl:
-    """A row of mutually exclusive options, all visible at once."""
 
+    # Create a row of options where exactly one is selected.
     def __init__(
         self,
         rect: pygame.Rect,
@@ -124,22 +131,26 @@ class SegmentedControl:
         self.on_change = on_change
         self.enabled = True
 
+    # Text of the selected option.
     @property
     def value(self) -> str:
         return self.options[self.index]
 
+    # Select an option by its text and optionally notify.
     def set_value(self, value: str, notify: bool = True) -> None:
         if value in self.options:
             self.index = self.options.index(value)
             if notify and self.on_change:
                 self.on_change(self.index, value)
 
+    # Rectangle of option i.
     def _segment(self, i: int) -> pygame.Rect:
         n = len(self.options)
         w = self.rect.width / n
         x0 = round(self.rect.x + i * w)
         return pygame.Rect(x0, self.rect.y, round(self.rect.x + (i + 1) * w) - x0, self.rect.height)
 
+    # Select the clicked option; returns True if handled.
     def handle_event(self, event: pygame.event.Event) -> bool:
         if not self.enabled:
             return False
@@ -153,8 +164,8 @@ class SegmentedControl:
                     return True
         return False
 
+    # Outlined row of options; the chosen one is filled with ink.
     def render(self, surface: pygame.Surface) -> None:
-        """Outlined row of options; the chosen one is filled with ink."""
         outline = col.TEXT if self.enabled else col.BORDER
         theme.aa_rect(surface, col.SURFACE, self.rect, border_radius=theme.RADIUS)
         mouse = pygame.mouse.get_pos()
@@ -176,9 +187,10 @@ class SegmentedControl:
         theme.aa_rect(surface, outline, self.rect, width=1, border_radius=theme.RADIUS)
 
 
+# Text tabs with an underline under the active one (same interface as SegmentedControl).
 class UnderlineTabs(SegmentedControl):
-    """Text tabs with an underline under the active one (same interface as SegmentedControl)."""
 
+    # Rectangle of tab i (tabs are as wide as their text).
     def _segment(self, i: int) -> pygame.Rect:
         x = self.rect.x
         for j in range(i):
@@ -186,6 +198,7 @@ class UnderlineTabs(SegmentedControl):
         w = self.font.size(self.options[i])[0] + 20
         return pygame.Rect(x, self.rect.y, w, self.rect.height)
 
+    # Draw the tabs with a line under the selected one.
     def render(self, surface: pygame.Surface) -> None:
         pygame.draw.line(surface, col.BORDER, (self.rect.x, self.rect.bottom - 1), (self.rect.right, self.rect.bottom - 1))
         mouse = pygame.mouse.get_pos()
@@ -199,9 +212,10 @@ class UnderlineTabs(SegmentedControl):
                 pygame.draw.rect(surface, col.TEXT, (seg.x + 8, seg.bottom - 3, seg.width - 16, 3))
 
 
+# Numeric value with - / + buttons; the value can never leave [minimum, maximum].
 class Stepper:
-    """Numeric value with - / + buttons; the value can never leave [minimum, maximum]."""
 
+    # Create a number box with - and + buttons.
     def __init__(
         self,
         rect: pygame.Rect,
@@ -222,12 +236,14 @@ class Stepper:
         self.enabled = True
         self.is_float = isinstance(step, float)
 
+    # Rectangles of the - and + buttons.
     def _buttons(self):
         size = self.rect.height - 8
         minus = pygame.Rect(self.rect.x + 4, self.rect.y + 4, size, size)
         plus = pygame.Rect(self.rect.right - 4 - size, self.rect.y + 4, size, size)
         return minus, plus
 
+    # Set the value within its range and optionally notify.
     def set_value(self, value: float, notify: bool = True) -> None:
         value = max(self.minimum, min(self.maximum, value))
         value = round(value, 2) if self.is_float else int(round(value))
@@ -236,10 +252,12 @@ class Stepper:
             if notify and self.on_change:
                 self.on_change(value)
 
+    # Change the allowed range and clamp the value.
     def set_range(self, minimum: float, maximum: float) -> None:
         self.minimum, self.maximum = minimum, maximum
         self.set_value(self.value)
 
+    # Change the value on a - or + click; returns True if handled.
     def handle_event(self, event: pygame.event.Event) -> bool:
         if not self.enabled:
             return False
@@ -256,6 +274,7 @@ class Stepper:
             return True
         return False
 
+    # Draw the box, the value and the two buttons.
     def render(self, surface: pygame.Surface) -> None:
         theme.aa_rect(surface, col.SURFACE, self.rect, border_radius=theme.RADIUS)
         theme.aa_rect(surface, col.TEXT if self.enabled else col.BORDER, self.rect, width=1,
@@ -275,11 +294,12 @@ class Stepper:
                         self.rect.center, "center")
 
 
+# Horizontal slider with the value shown on the right.
 class Slider:
-    """Horizontal slider with the value shown on the right."""
 
     VALUE_W = 46
 
+    # Create a slider for a number range.
     def __init__(
         self,
         rect: pygame.Rect,
@@ -300,10 +320,12 @@ class Slider:
         self.dragging = False
         self.enabled = True
 
+    # Rectangle of the slider's track.
     @property
     def track(self) -> pygame.Rect:
         return pygame.Rect(self.rect.x + 8, self.rect.centery - 2, self.rect.width - self.VALUE_W - 20, 4)
 
+    # Set the value from a mouse x position on the track.
     def _set_from_x(self, x: int) -> None:
         t = self.track
         frac = max(0.0, min(1.0, (x - t.x) / max(1, t.width)))
@@ -314,6 +336,7 @@ class Slider:
             if self.on_change:
                 self.on_change(value)
 
+    # Click or drag on the track to change the value; returns True if handled.
     def handle_event(self, event: pygame.event.Event) -> bool:
         if not self.enabled:
             return False
@@ -330,6 +353,7 @@ class Slider:
             return True
         return False
 
+    # Draw the track, the knob and the value.
     def render(self, surface: pygame.Surface) -> None:
         t = self.track
         frac = (self.value - self.minimum) / max(1e-9, self.maximum - self.minimum)
@@ -343,15 +367,17 @@ class Slider:
                         (self.rect.right, self.rect.centery), "midright")
 
 
+# On / off switch.
 class Toggle:
-    """On / off switch."""
 
+    # Create an on/off switch.
     def __init__(self, rect: pygame.Rect, value: bool, on_change: Optional[Callable[[bool], None]] = None):
         self.rect = rect
         self.value = value
         self.on_change = on_change
         self.enabled = True
 
+    # Flip the switch on click; returns True if handled.
     def handle_event(self, event: pygame.event.Event) -> bool:
         if self.enabled and event.type == pygame.MOUSEBUTTONDOWN and event.button == 1 \
                 and self.rect.collidepoint(event.pos):
@@ -361,6 +387,7 @@ class Toggle:
             return True
         return False
 
+    # Draw the switch in its on or off position.
     def render(self, surface: pygame.Surface) -> None:
         on = self.value
         track = col.PRIMARY if (on and self.enabled) else (col.BORDER_STRONG if self.enabled else col.SURFACE_SUNK)
@@ -370,9 +397,10 @@ class Toggle:
         theme.aa_circle(surface, col.SURFACE, (kx, self.rect.centery), r - 3)
 
 
+# Large selectable card with icons, a title and a description.
 class ChoiceCard:
-    """Large selectable card with icons, a title and a description."""
 
+    # Create a clickable card with a title and description.
     def __init__(
         self,
         rect: pygame.Rect,
@@ -388,6 +416,7 @@ class ChoiceCard:
         self.callback = callback
         self.selected = False
 
+    # Run the card's action on click; returns True if handled.
     def handle_event(self, event: pygame.event.Event) -> bool:
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1 and self.rect.collidepoint(event.pos):
             if self.callback:
@@ -395,6 +424,7 @@ class ChoiceCard:
             return True
         return False
 
+    # Draw the card, highlighted when selected or hovered.
     def render(self, surface: pygame.Surface) -> None:
         hover = _hovered(self.rect)
         if self.selected:
@@ -411,9 +441,10 @@ class ChoiceCard:
             y += 19
 
 
+# Single-line text / number field with focus, caret and error highlighting.
 class TextInput:
-    """Single-line text / number field with focus, caret and error highlighting."""
 
+    # Create a labelled text box (text, whole number or decimal).
     def __init__(
         self,
         rect: pygame.Rect,
@@ -439,6 +470,7 @@ class TextInput:
         self.error = False
         self.enabled = True
 
+    # True if the typed character is allowed for this kind of box.
     def _accepts(self, ch: str) -> bool:
         if self.kind == "int":
             return ch.isdigit() or (ch == "-" and not self.text)
@@ -446,6 +478,7 @@ class TextInput:
             return ch.isdigit() or (ch == "." and "." not in self.text) or (ch == "-" and not self.text)
         return ch.isprintable()
 
+    # Focus on click and edit the text with the keyboard; returns True if handled.
     def handle_event(self, event: pygame.event.Event) -> bool:
         if not self.enabled:
             return False
@@ -470,6 +503,7 @@ class TextInput:
             return True
         return False
 
+    # Draw the box, its text, the cursor and any error.
     def render(self, surface: pygame.Surface) -> None:
         fill = col.SURFACE if self.enabled else col.SURFACE_ALT
         theme.aa_rect(surface, fill, self.rect, border_radius=theme.RADIUS)
@@ -496,9 +530,10 @@ class TextInput:
             pygame.draw.line(surface, col.PRIMARY, (cx, r.top + 2), (cx, r.bottom - 2), 2)
 
 
+# Compact selector cycling through options with < and > (used when options are many).
 class OptionSelector:
-    """Compact selector cycling through options with < and > (used when options are many)."""
 
+    # Create a selector that steps through options with arrow buttons.
     def __init__(
         self,
         rect: pygame.Rect,
@@ -518,32 +553,38 @@ class OptionSelector:
         self.on_change = on_change
         self.enabled = True
 
+    # Rectangle of the 'previous' arrow.
     @property
     def left_rect(self) -> pygame.Rect:
         size = self.rect.height - 10
         return pygame.Rect(self.rect.right - 2 * size - 10, self.rect.y + 5, size, size)
 
+    # Rectangle of the 'next' arrow.
     @property
     def right_rect(self) -> pygame.Rect:
         size = self.rect.height - 10
         return pygame.Rect(self.rect.right - size - 5, self.rect.y + 5, size, size)
 
+    # Text of the selected option.
     @property
     def selected_value(self) -> str:
         return self.options[self.index] if 0 <= self.index < len(self.options) else ""
 
+    # Select option number `index` (wraps around) and optionally notify.
     def set_index(self, index: int, notify: bool = True) -> None:
         if self.options:
             self.index = index % len(self.options)
             if notify and self.on_change:
                 self.on_change(self.index, self.selected_value)
 
+    # Select an option by its text; returns False if it is not in the list.
     def set_value(self, value: str, notify: bool = True) -> bool:
         if value in self.options:
             self.set_index(self.options.index(value), notify)
             return True
         return False
 
+    # Move to the previous or next option on an arrow click; returns True if handled.
     def handle_event(self, event: pygame.event.Event) -> bool:
         if not self.enabled or not self.options:
             return False
@@ -556,6 +597,7 @@ class OptionSelector:
                 return True
         return False
 
+    # Draw the label, the selected option and the arrows.
     def render(self, surface: pygame.Surface) -> None:
         theme.aa_rect(surface, col.SURFACE, self.rect, border_radius=theme.RADIUS)
         theme.aa_rect(surface, col.BORDER_STRONG, self.rect, width=1, border_radius=theme.RADIUS)

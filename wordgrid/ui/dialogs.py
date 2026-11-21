@@ -1,4 +1,4 @@
-"""Modal dialogs: confirmation prompt and the How-to-play guide."""
+# Modal dialogs: confirmation prompt and the How-to-play guide.
 
 import pygame
 from typing import Callable, Optional
@@ -7,9 +7,10 @@ from wordgrid.ui import theme
 from wordgrid.ui.controls import Button, wrap_text
 
 
+# Small modal asking the user to confirm a destructive action.
 class ConfirmDialog:
-    """Small modal asking the user to confirm a destructive action."""
 
+    # Create a hidden yes/no dialog with its two buttons.
     def __init__(self):
         self.visible = False
         self.title = ""
@@ -19,27 +20,31 @@ class ConfirmDialog:
         self.btn_cancel = Button(pygame.Rect(0, 0, 130, 42), "Keep playing", callback=self.close)
         self.btn_confirm = Button(pygame.Rect(0, 0, 130, 42), "Leave", variant="danger", callback=self._confirm)
 
+    # Show the dialog with a title, message and confirm action.
     def open(self, title: str, message: str, confirm_text: str, on_confirm: Callable[[], None]) -> None:
         self.title, self.message = title, message
         self.btn_confirm.text = confirm_text
         self._on_confirm = on_confirm
         self.visible = True
 
+    # Hide the dialog.
     def close(self) -> None:
         self.visible = False
 
+    # Hide the dialog and run the confirm action.
     def _confirm(self) -> None:
         self.visible = False
         if self._on_confirm:
             self._on_confirm()
 
+    # Centre the card and place the buttons.
     def _layout(self, surface: pygame.Surface) -> None:
         self.card.center = surface.get_rect().center
         self.btn_confirm.rect.bottomright = (self.card.right - 20, self.card.bottom - 20)
         self.btn_cancel.rect.bottomright = (self.btn_confirm.rect.x - 10, self.card.bottom - 20)
 
+    # Returns True when the dialog consumed the event (always, while visible).
     def handle_event(self, event: pygame.event.Event) -> bool:
-        """Returns True when the dialog consumed the event (always, while visible)."""
         if not self.visible:
             return False
         if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
@@ -50,6 +55,7 @@ class ConfirmDialog:
             self.btn_cancel.handle_event(event) or self.btn_confirm.handle_event(event)
         return True
 
+    # Draw the dialog over a dimmed screen.
     def render(self, surface: pygame.Surface) -> None:
         if not self.visible:
             return
@@ -90,20 +96,24 @@ HELP_SECTIONS = [
 ]
 
 
+# How-to-play guide shown on request (the ? button or F1).
 class HelpOverlay:
-    """How-to-play guide shown on request (the ? button or F1)."""
 
+    # Create the hidden 'How to play' card and its close button.
     def __init__(self):
         self.visible = False
         self.card = pygame.Rect(0, 0, 680, 540)
         self.btn_close = Button(pygame.Rect(0, 0, 150, 42), "Got it", variant="primary", callback=self.close)
 
+    # Show the help card.
     def open(self) -> None:
         self.visible = True
 
+    # Hide the help card.
     def close(self) -> None:
         self.visible = False
 
+    # Close on Esc, Enter, F1 or the button; blocks other input while open.
     def handle_event(self, event: pygame.event.Event) -> bool:
         if not self.visible:
             return False
@@ -115,6 +125,7 @@ class HelpOverlay:
             self.btn_close.handle_event(event)
         return True
 
+    # Draw the help card over a dimmed screen.
     def render(self, surface: pygame.Surface) -> None:
         if not self.visible:
             return

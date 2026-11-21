@@ -1,4 +1,4 @@
-"""Score cards, match info strip and the AI / last-move insight panel."""
+# Score cards, match info strip and the AI / last-move insight panel.
 
 import time
 import pygame
@@ -12,13 +12,13 @@ from wordgrid.ui.controls import wrap_text
 POPUP_SECONDS = 1.6
 
 
+# 1-based, human friendly cell name.
 def cell_label(r: int, c: int) -> str:
-    """1-based, human friendly cell name."""
     return f"row {r + 1}, col {c + 1}"
 
 
+# Plain-language summary of an AI move.
 def friendly_ai_text(stats: Dict[str, Any], name: str, opponent: str) -> str:
-    """Plain-language summary of an AI move."""
     move = stats.get("selected_move")
     if not move:
         return f"{name} made a move."
@@ -36,6 +36,7 @@ def friendly_ai_text(stats: Dict[str, Any], name: str, opponent: str) -> str:
     return text
 
 
+# One line of technical details: time, positions searched, simulations.
 def ai_details_text(stats: Dict[str, Any]) -> str:
     # The panel title already names the AI, so the line starts with the numbers
     parts = [f"{stats.get('elapsed_time', 0.0) * 1000:,.0f} ms"]
@@ -50,20 +51,24 @@ def ai_details_text(stats: Dict[str, Any]) -> str:
     return "  ·  ".join(parts)
 
 
+# Two player score cards with turn highlight, move counters and '+N' pop-ups.
 class StatisticsPanel:
-    """Two player score cards with turn highlight, move counters and '+N' pop-ups."""
 
+    # Score panel with no '+points' popups yet.
     def __init__(self, rect: pygame.Rect, title_font=None, font=None, small_font=None):
         self.rect = rect
         self.popups: List[Dict[str, Any]] = []
 
+    # Show a short '+points' popup for a player.
     def add_score_popup(self, player: int, points: int) -> None:
         self.popups = [p for p in self.popups if p["player"] != player]
         self.popups.append({"player": player, "points": points, "t0": time.time()})
 
+    # Remove all popups.
     def clear(self) -> None:
         self.popups.clear()
 
+    # Draw one player's score card.
     def _card(self, surface, rect, state: GameState, pid: int, name: str, role: str) -> None:
         accent = col.player_color(pid)
         active = state.current_player == pid and not state.is_terminal
@@ -112,6 +117,7 @@ class StatisticsPanel:
             surf.set_alpha(max(0, int(255 * (1 - age / POPUP_SECONDS))))
             surface.blit(surf, (sr.right + 56, sr.y + 4 - int(age * 12)))
 
+    # Draw both score cards and any popups.
     def render(self, surface, state: GameState, names: Dict[int, str], roles: Dict[int, str]) -> None:
         self.popups = [p for p in self.popups if time.time() - p["t0"] <= POPUP_SECONDS]
         gap = 14
@@ -121,8 +127,8 @@ class StatisticsPanel:
             self._card(surface, rect, state, pid, names[pid], roles[pid])
 
 
+# One line: termination rule, squares left, move number.
 def render_info_strip(surface, rect: pygame.Rect, state: GameState) -> None:
-    """One line: termination rule, squares left, move number."""
     mode = MODE_LABELS.get(state.game_mode, state.game_mode)
     if state.game_mode == MODE_REACH_GOAL_SCORE:
         mode = f"First to {state.goal_score} points"
@@ -137,12 +143,14 @@ def render_info_strip(surface, rect: pygame.Rect, state: GameState) -> None:
                     (rect.x + 4, rect.centery), "midleft")
 
 
+# Explains the latest move: a friendly sentence, plus optional technical details.
 class InsightPanel:
-    """Explains the latest move: a friendly sentence, plus optional technical details."""
 
+    # Panel that explains the last move.
     def __init__(self, rect: pygame.Rect):
         self.rect = rect
 
+    # Draw the title, explanation and optional details.
     def render(
         self,
         surface,

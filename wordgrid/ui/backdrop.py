@@ -1,7 +1,6 @@
-"""Paper background image shared by the screens.
-
-The image is scaled to cover the window once per size and cached, so a frame costs one blit.
-"""
+# Paper background image shared by the screens.
+#
+# The image is scaled to cover the window once per size and cached, so a frame costs one blit.
 
 import pygame
 from typing import Dict, Optional, Tuple
@@ -13,6 +12,7 @@ _image: Optional[pygame.Surface] = None
 _image_failed = False
 
 
+# Load the paper background image once; remember if it fails.
 def _load_image() -> Optional[pygame.Surface]:
     global _image, _image_failed
     if _image is None and not _image_failed:
@@ -23,8 +23,8 @@ def _load_image() -> Optional[pygame.Surface]:
     return _image
 
 
+# The background image scaled to cover a window of this size (cached).
 def backdrop(size: Tuple[int, int]) -> pygame.Surface:
-    """The background image scaled to cover a window of this size (cached)."""
     if size not in _BACKDROPS:
         surf = pygame.Surface(size)
         surf.fill(col.BG)
@@ -38,5 +38,6 @@ def backdrop(size: Tuple[int, int]) -> pygame.Surface:
     return _BACKDROPS[size]
 
 
+# Draw the background over the whole window.
 def draw_backdrop(surface: pygame.Surface) -> None:
     surface.blit(backdrop(surface.get_size()), (0, 0))

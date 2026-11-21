@@ -1,4 +1,4 @@
-"""Pre-match settings: data model, validation and agent construction (UI independent)."""
+# Pre-match settings: data model, validation and agent construction (UI independent).
 
 import random
 from dataclasses import dataclass, field
@@ -41,8 +41,8 @@ DIFFICULTY_CUSTOM = "Custom"
 DIFFICULTY_OPTIONS = DIFFICULTIES + [DIFFICULTY_CUSTOM]
 
 
+# Word lists that can be selected: every *.txt in data/ (default dictionary first).
 def available_dictionaries() -> List[Tuple[str, Path]]:
-    """Word lists that can be selected: every *.txt in data/ (default dictionary first)."""
     found: List[Tuple[str, Path]] = []
     if CLEANED_DICT_PATH.exists():
         found.append(("Standard English", CLEANED_DICT_PATH))
@@ -61,6 +61,7 @@ class PlayerSettings:
     controller: str = CONTROLLER_HUMAN
     difficulty: str = "Medium"
 
+    # True if this player is controlled by a person.
     @property
     def is_human(self) -> bool:
         return self.controller == CONTROLLER_HUMAN
@@ -99,8 +100,8 @@ class MatchSettings:
     def player(self, pid: int) -> PlayerSettings:
         return self.p1 if pid == 1 else self.p2
 
+    # Engine configuration. starting_player overrides a 'random' (0) start choice.
     def game_config(self, starting_player: Optional[int] = None) -> GameConfig:
-        """Engine configuration. starting_player overrides a 'random' (0) start choice."""
         start = starting_player or (self.starting_player if self.starting_player in (1, 2) else 1)
         return GameConfig(
             board_size=self.board_size,
@@ -112,8 +113,8 @@ class MatchSettings:
             dictionary_path=self.dictionary_path,
         )
 
+    # Returns every problem with the settings (empty list when the match can start).
     def validate(self) -> List[str]:
-        """Returns every problem with the settings (empty list when the match can start)."""
         errors = self.game_config().validate()
         if self.starting_player not in (0, 1, 2):
             errors.append("Starting player must be Player 1, Player 2 or Random.")
@@ -162,8 +163,8 @@ class MatchSettings:
         return errors
 
     # ------------------------------------------------------------------ agents
+    # Builds the agent for player pid (None for a human). Agents share the engine rules.
     def create_agent(self, pid: int, rules: GameRules) -> Optional[BaseAgent]:
-        """Builds the agent for player pid (None for a human). Agents share the engine rules."""
         p = self.player(pid)
         if p.is_human:
             return None
@@ -200,8 +201,8 @@ class MatchSettings:
         agent.difficulty = label  # type: ignore[attr-defined]
         return agent
 
+    # 1 or 2; a 'random' start (0) is drawn from rng (or the seed).
     def resolve_starting_player(self, rng: Optional[random.Random] = None) -> int:
-        """1 or 2; a 'random' start (0) is drawn from rng (or the seed)."""
         if self.starting_player in (1, 2):
             return self.starting_player
         return (rng or random.Random(self.seed)).choice([1, 2])

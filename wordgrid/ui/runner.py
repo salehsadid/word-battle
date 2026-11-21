@@ -9,7 +9,6 @@ from wordgrid.config import UIConfig, CLEANED_DICT_PATH, RESULTS_DIR, APP_ICON_P
 from wordgrid.game.engine import GameEngine
 from wordgrid.dictionary.loader import DictionaryLoader
 from wordgrid.dictionary.word_validator import WordValidator
-from wordgrid.ai.random_agent import RandomAgent
 from wordgrid.ai.alphabeta_agent import AlphaBetaAgent
 from wordgrid.ai.mcts_agent import MCTSAgent
 from wordgrid.ai.evaluation import HeuristicEvaluator
@@ -24,8 +23,8 @@ from wordgrid.ui import colors as col
 from wordgrid.ui import theme
 
 
+# Draw at real screen pixels: stop Windows bitmap-stretching the window, and smooth pygame's own scaling.
 def _prepare_display() -> None:
-    """Draw at real screen pixels: stop Windows bitmap-stretching the window, and smooth pygame's own scaling."""
     if sys.platform == "win32":
         import ctypes
         try:
@@ -39,9 +38,10 @@ def _prepare_display() -> None:
     os.environ.setdefault("SDL_RENDER_SCALE_QUALITY", "1")
 
 
+# Coordinates Pygame window lifecycle, screen transitions, and tournament threads.
 class UIRunner:
-    """Coordinates Pygame window lifecycle, screen transitions, and tournament threads."""
 
+    # Open the window and create the menu screen.
     def __init__(self, config: Optional[UIConfig] = None):
         self.config = config or UIConfig()
         _prepare_display()
@@ -98,6 +98,7 @@ class UIRunner:
             callback=self.return_to_menu,
         )
 
+    # Load a dictionary once and reuse it.
     def _get_validator(self, path: Path) -> WordValidator:
         path = Path(path)
         if path not in self._validators:
@@ -131,8 +132,8 @@ class UIRunner:
         )
         self.current_screen_name = "GAME"
 
+    # Creates a fresh engine and agents for a (re)started match.
     def _build_engine(self, settings: MatchSettings, validator: WordValidator, rng: random.Random):
-        """Creates a fresh engine and agents for a (re)started match."""
         start = settings.resolve_starting_player(rng)
         engine = GameEngine(validator=validator, config=settings.game_config(start))
         agents = {pid: settings.create_agent(pid, engine.rules) for pid in (1, 2)}
@@ -150,14 +151,15 @@ class UIRunner:
         g_config = settings.game_config(1)
         seed = settings.seed if settings.seed is not None else 42
         difficulty = "Medium"
+        games = 4  # Minimax vs MCTS, alternating who starts
 
+        # Background thread: play the benchmark games and save the results.
         def _worker():
             try:
                 runner = TournamentRunner(validator=validator, config=g_config)
                 mm = DIFFICULTY_PRESETS[difficulty]["minimax"]
                 mc = DIFFICULTY_PRESETS[difficulty]["mcts"]
                 agents = [
-                    RandomAgent("Random", seed=seed),
                     AlphaBetaAgent(
                         "Minimax",
                         depth=mm["depth"],
@@ -177,9 +179,9 @@ class UIRunner:
                 ]
                 self.tournament_progress = (
                     f"Round robin on {g_config.board_size}x{g_config.board_size}, "
-                    f"{difficulty} presets, 2 games per pairing..."
+                    f"{difficulty} presets, {games} games..."
                 )
-                matches, stats = runner.run_tournament(agents, games_per_pairing=2)
+                matches, stats = runner.run_tournament(agents, games_per_pairing=games)
 
                 out_dir = RESULTS_DIR
                 ResultsExporter.export_to_json(matches, stats, out_dir / "results.json")
@@ -192,6 +194,7 @@ class UIRunner:
 
         threading.Thread(target=_worker, daemon=True).start()
 
+    # Stop the current match and show the menu.
     def return_to_menu(self):
         if self.game_screen is not None:
             self.game_screen.shutdown()
@@ -230,10 +233,11 @@ class UIRunner:
             self.game_screen.shutdown()
         pygame.quit()
 
+    # Draw the benchmark progress or its results.
     def _render_tournament_screen(self):
         self.screen.fill(col.BG)
         theme.draw_text(self.screen, "AI benchmark", theme.serif(theme.SIZE_DISPLAY), col.TEXT, (60, 40))
-        theme.draw_text(self.screen, "Random, Minimax and MCTS play each other twice, "
+        theme.draw_text(self.screen, "Minimax and MCTS play each other 4 times on this board, "
                                      "alternating who starts.", theme.font(theme.SIZE_BODY), col.TEXT_MUTED, (60, 88))
         card = pygame.Rect(60, 130, 980, 520)
         theme.draw_card(self.screen, card, border=col.BORDER_STRONG)

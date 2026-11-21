@@ -23,15 +23,14 @@ FILLER_LETTERS = 3
 LetterOptions = Dict[str, Tuple[int, int]]
 
 
+# Computes, for an empty cell, what every letter would score there.
+#
+# Uses the dictionary trie directly when available (WordValidator), so a whole cell is analysed with a handful of trie
+# walks instead of 26 full move evaluations. Falls back to the authoritative ScoringSystem for validators without a
+# trie (e.g. small test validators). Both paths implement exactly the rules of ScoringSystem.evaluate_move.
 class OpportunityScanner:
-    """Computes, for an empty cell, what every letter would score there.
 
-    Uses the dictionary trie directly when available (WordValidator), so a whole cell is analysed
-    with a handful of trie walks instead of 26 full move evaluations. Falls back to the
-    authoritative ScoringSystem for validators without a trie (e.g. small test validators).
-    Both paths implement exactly the rules of ScoringSystem.evaluate_move.
-    """
-
+    # Start with no dictionary and empty caches.
     def __init__(self, scoring: ScoringSystem):
         self.scoring = scoring
         self._validator = None
@@ -67,6 +66,7 @@ class OpportunityScanner:
             rr += 1
         return left, right, up, down
 
+    # True if the square touches a letter above, below, left or right.
     @staticmethod
     def has_neighbor(board: Board, r: int, c: int) -> bool:
         grid, n = board.grid, board.size
@@ -77,19 +77,13 @@ class OpportunityScanner:
             or (c + 1 < n and grid[r][c + 1] is not None)
         )
 
+    # All words before[i:] + X + after[:j] (read forward) for every letter X.
     def _directional(
         self,
         before: Tuple[str, ...],
         after: Tuple[str, ...],
         validator: WordValidatorProtocol,
     ):
-        """All words before[i:] + X + after[:j] (read forward) for every letter X.
-
-        Returns (words, alive, best, word_set): words is a list of (X, word, length) meeting the
-        minimum length, alive maps X to the longest dictionary-prefix run through the cell, best
-        maps X to its longest word and word_set holds every word. Results ignore match history
-        so they can be cached; callers filter out already scored words.
-        """
         key = (before, after)
         cached = self._cache.get(key)
         if cached is not None:
@@ -159,6 +153,7 @@ class OpportunityScanner:
         self._cache[key] = result
         return result
 
+    # Switch to a new dictionary and clear the caches.
     def _bind_validator(self, validator: WordValidatorProtocol) -> None:
         if validator is not self._validator:
             self._validator = validator
@@ -166,8 +161,8 @@ class OpportunityScanner:
             self._cache = {}
             self._cell_cache = {}
 
+    # Directional scans for a cell plus the merged, history-free letter options.
     def _cell_scans(self, board: Board, r: int, c: int, validator: WordValidatorProtocol):
-        """Directional scans for a cell plus the merged, history-free letter options."""
         self._bind_validator(validator)
         left, right, up, down = self._runs(board, r, c)
         key = (tuple(left), tuple(right), tuple(up), tuple(down))
@@ -202,6 +197,7 @@ class OpportunityScanner:
         self._cell_cache[key] = result
         return result
 
+    # Returns {letter: (points, prefix_reach)} for placing letters at empty cell (r, c).
     def letter_options(
         self,
         state: GameState,
@@ -209,11 +205,6 @@ class OpportunityScanner:
         c: int,
         validator: WordValidatorProtocol,
     ) -> LetterOptions:
-        """Returns {letter: (points, prefix_reach)} for placing letters at empty cell (r, c).
-
-        Sparse: letters that neither score nor extend a dictionary prefix are omitted, so look
-        them up with opts.get(letter, (0, 0)). The returned dict may be shared: do not mutate it.
-        """
         scans, merged, word_set, _ = self._cell_scans(state.board, r, c, validator)
         scored_words = state.scored_words
         if scored_words.isdisjoint(word_set):
@@ -226,8 +217,8 @@ class OpportunityScanner:
                     best[x] = length
         return {ch: (best.get(ch, 0), reach) for ch, (_, reach) in merged.items()}
 
+    # Best points any letter could earn at empty cell (r, c).
     def cell_best(self, state: GameState, r: int, c: int, validator: WordValidatorProtocol) -> int:
-        """Best points any letter could earn at empty cell (r, c)."""
         scans, _, word_set, top = self._cell_scans(state.board, r, c, validator)
         scored_words = state.scored_words
         if scored_words.isdisjoint(word_set):
@@ -240,8 +231,8 @@ class OpportunityScanner:
         return best
 
     # ------------------------------------------------------------------ board
+    # Highest number of points the player to move could earn with a single move.
     def best_immediate_score(self, state: GameState, validator: WordValidatorProtocol) -> int:
-        """Highest number of points the player to move could earn with a single move."""
         board = state.board
         best = 0
         for r in range(board.size):
@@ -252,8 +243,8 @@ class OpportunityScanner:
                         best = cell_best
         return best
 
+    # {cell: best points available there} for every empty cell next to a letter.
     def threat_map(self, state: GameState, validator: WordValidatorProtocol) -> Dict[Tuple[int, int], int]:
-        """{cell: best points available there} for every empty cell next to a letter."""
         board = state.board
         out: Dict[Tuple[int, int], int] = {}
         for r in range(board.size):
@@ -263,34 +254,35 @@ class OpportunityScanner:
         return out
 
 
+# Prioritizes moves based on immediate scoring, blocking value and prefix potential.
+#
+# Used to accelerate Alpha-Beta pruning cutoffs, to limit branching (top_k) and to choose which children MCTS expands
+# first.
 class MoveOrdering:
-    """Prioritizes moves based on immediate scoring, blocking value and prefix potential.
 
-    Used to accelerate Alpha-Beta pruning cutoffs, to limit branching (top_k) and to choose
-    which children MCTS expands first.
-    """
-
+    # Keep the scoring rules and a scanner that scores each square.
     def __init__(self, scoring_system: ScoringSystem):
         self.scoring = scoring_system
         self.scanner = OpportunityScanner(scoring_system)
 
+    # Use a new scoring system and a fresh scanner.
     def set_scoring(self, scoring_system: ScoringSystem) -> None:
         self.scoring = scoring_system
         self.scanner = OpportunityScanner(scoring_system)
 
+    # Estimates the immediate promise of a single move (without diversity adjustments).
     def score_candidate_move(
         self,
         state: GameState,
         move: Move,
         validator: WordValidatorProtocol,
     ) -> float:
-        """Estimates the immediate promise of a single move (without diversity adjustments)."""
         r, c, ch = move
         opts = self.scanner.letter_options(state, r, c, validator)
         return self._cell_base(state, r, c, opts) + self._letter_priority(ch, opts)
 
+    # Part of the priority shared by every letter placed at (r, c).
     def _cell_base(self, state: GameState, r: int, c: int, opts: LetterOptions) -> float:
-        """Part of the priority shared by every letter placed at (r, c)."""
         board = state.board
         cell_best = max((p for p, _ in opts.values()), default=0)
         center = (board.size - 1) / 2.0
@@ -303,11 +295,13 @@ class MoveOrdering:
             base += 1.0
         return base
 
+    # Letter part of a move's priority: points now, word potential, then letter frequency.
     @staticmethod
     def _letter_priority(ch: str, opts: LetterOptions) -> float:
         pts, reach = opts.get(ch, (0, 0))
         return pts * 10.0 + 0.25 * reach + 0.02 * LETTER_FREQUENCY.get(ch, 0.0)
 
+    # Orders moves in descending order of promise.
     def order_moves(
         self,
         state: GameState,
@@ -315,12 +309,6 @@ class MoveOrdering:
         validator: WordValidatorProtocol,
         top_k: int = 0,
     ) -> List[Move]:
-        """Orders moves in descending order of promise.
-
-        Letters competing for the same cell are slightly penalised by rank so that a truncated
-        list (top_k > 0) covers several cells instead of 26 letters on one cell.
-        If top_k <= 0, returns all moves sorted.
-        """
         if not moves:
             return []
 

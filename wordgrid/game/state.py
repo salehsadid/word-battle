@@ -8,13 +8,12 @@ from wordgrid.config import (
 )
 
 
+# Represents the complete game state for WordGrid.
+#
+# Contains all state necessary for authoritative game progression, undo/redo, and search simulation.
 class GameState:
-    """Represents the complete game state for WordGrid.
-    
-    Contains all state necessary for authoritative game progression,
-    undo/redo, and search simulation.
-    """
 
+    # Board, player to move, scores, used words, move counts and end-rule settings.
     def __init__(
         self,
         board: Optional[Board] = None,
@@ -60,12 +59,13 @@ class GameState:
         self.starting_player = starting_player if starting_player is not None else current_player
         self.end_reason = end_reason  # Why the match ended (see rules.END_* constants)
 
+    # The player who is not to move.
     @property
     def opponent_player(self) -> int:
         return 2 if self.current_player == 1 else 1
 
+    # Returns a fast, completely independent copy of the state.
     def clone(self) -> "GameState":
-        """Returns a fast, completely independent copy of the state."""
         return GameState(
             board=self.board.copy(),
             board_size=self.board.size,
@@ -87,20 +87,22 @@ class GameState:
             end_reason=self.end_reason,
         )
 
+    # Number of moves the given player has made so far (players strictly alternate).
     def moves_made_by(self, player: int) -> int:
-        """Number of moves the given player has made so far (players strictly alternate)."""
         first = (self.move_count + 1) // 2
         return first if player == self.starting_player else self.move_count - first
 
+    # Number of empty squares left.
     @property
     def empty_cell_count(self) -> int:
         return sum(1 for row in self.board.grid for v in row if v is None)
 
+    # Returns score difference from perspective of specified player.
     def get_score_difference(self, player: int) -> int:
-        """Returns score difference from perspective of specified player."""
         opp = 2 if player == 1 else 1
         return self.scores.get(player, 0) - self.scores.get(opp, 0)
 
+    # State as text: scores, move count, status and the board.
     def __repr__(self) -> str:
         status = f"Terminal (Winner: {self.winner})" if self.is_terminal else f"Turn: Player {self.current_player}"
         return (

@@ -1,4 +1,4 @@
-"""UI subsystem for WordGrid."""
+# UI subsystem for WordGrid.
 
 from wordgrid.ui.colors import *
 from wordgrid.ui.controls import Button, OptionSelector

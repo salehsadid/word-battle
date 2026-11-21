@@ -8,13 +8,15 @@ from wordgrid.ui import theme
 FLASH_SECONDS = 1.4
 
 
+# Draws the grid as flat puzzle squares: yellow = newest letter, green = scored word.
 class BoardRenderer:
-    """Draws the grid as flat puzzle squares: yellow = newest letter, green = scored word."""
 
+    # Remember where the board is drawn and the fonts to use.
     def __init__(self, board_rect: pygame.Rect, font=None, small_font=None):
         self.board_rect = board_rect
         self.selected_cell: Optional[Tuple[int, int]] = None
 
+    # Screen rectangle of square (r, c).
     def cell_rect(self, board: Board, r: int, c: int) -> pygame.Rect:
         size = board.size
         pad = 10
@@ -28,8 +30,8 @@ class BoardRenderer:
             round(cell - gap),
         )
 
+    # Maps a screen position to (row, col), or None.
     def get_cell_at_pos(self, board: Board, pos: Tuple[int, int]) -> Optional[Tuple[int, int]]:
-        """Maps a screen position to (row, col), or None."""
         if not self.board_rect.collidepoint(pos):
             return None
         for r in range(board.size):
@@ -38,6 +40,7 @@ class BoardRenderer:
                     return (r, c)
         return None
 
+    # Draw the grid, letters, highlights and the hovered or selected square.
     def render(
         self,
         surface: pygame.Surface,

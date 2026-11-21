@@ -9,16 +9,16 @@ from wordgrid.ai.move_ordering import MoveOrdering
 from wordgrid.ai.explain import describe_move
 
 
+# Heuristic Minimax with optional Alpha-Beta pruning and move ordering.
+#
+# Configuration:
+#   depth            - search horizon in plies.
+#   use_pruning      - Alpha-Beta pruning on/off (off = plain Minimax over the same tree).
+#   candidate_k      - consider only the k most promising moves per node (0 = all legal moves).
+#   evaluator        - HeuristicEvaluator carrying the heuristic weights.
 class AlphaBetaAgent(BaseAgent):
-    """Heuristic Minimax with optional Alpha-Beta pruning and move ordering.
 
-    Configuration:
-      depth            - search horizon in plies.
-      use_pruning      - Alpha-Beta pruning on/off (off = plain Minimax over the same tree).
-      candidate_k      - consider only the k most promising moves per node (0 = all legal moves).
-      evaluator        - HeuristicEvaluator carrying the heuristic weights.
-    """
-
+    # Set up the search depth, evaluator, move ordering and counters.
     def __init__(
         self,
         name: str = "AlphaBeta",
@@ -42,17 +42,20 @@ class AlphaBetaAgent(BaseAgent):
         self.nodes_visited = 0
         self.cutoffs = 0
 
+    # Use the match's rules, and give the same scoring to move ordering and the evaluator.
     def bind_rules(self, rules: GameRules) -> None:
         super().bind_rules(rules)
         self.move_orderer.set_scoring(rules.scoring)
         self.evaluator.set_scoring(rules.scoring)
 
+    # Moves to search at a node: the best k after move ordering, or all legal moves.
     def _candidates(self, state: GameState, validator: WordValidatorProtocol) -> List[Move]:
         legal_moves = self.rules.get_legal_moves(state)
         if self.use_move_ordering or self.candidate_k > 0:
             return self.move_orderer.order_moves(state, legal_moves, validator, top_k=self.candidate_k)
         return legal_moves
 
+    # Run alpha-beta search from the current state and return the best move.
     def select_move(self, state: GameState, validator: WordValidatorProtocol) -> Move:
         start_time = time.perf_counter()
         self.nodes_visited = 0
@@ -106,6 +109,7 @@ class AlphaBetaAgent(BaseAgent):
             self.last_stats["explanation"] = facts["summary"]
         return best_move
 
+    # Minimax with alpha-beta pruning; returns (value, best move) for this node.
     def _alphabeta(
         self,
         state: GameState,

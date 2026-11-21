@@ -2,9 +2,9 @@ from dataclasses import dataclass, field
 from typing import Dict, Any, List, Optional
 
 
+# Detailed record of a single game between two agents.
 @dataclass
 class MatchResult:
-    """Detailed record of a single game between two agents."""
     p1_name: str
     p2_name: str
     p1_score: int
@@ -24,9 +24,9 @@ class MatchResult:
     p2_moves: int = 0
 
 
+# Aggregated tournament statistics for a single agent.
 @dataclass
 class AgentTournamentStats:
-    """Aggregated tournament statistics for a single agent."""
     name: str
     matches_played: int = 0
     wins: int = 0
@@ -40,22 +40,27 @@ class AgentTournamentStats:
     total_cutoffs: int = 0
     total_mcts_sims: int = 0
 
+    # Share of matches won (0 to 1).
     @property
     def win_rate(self) -> float:
         return (self.wins / self.matches_played) if self.matches_played > 0 else 0.0
 
+    # Average points per match.
     @property
     def avg_score(self) -> float:
         return (self.total_score / self.matches_played) if self.matches_played > 0 else 0.0
 
+    # Average score margin per match.
     @property
     def avg_score_diff(self) -> float:
         return (self.total_score_diff / self.matches_played) if self.matches_played > 0 else 0.0
 
+    # Average seconds per move.
     @property
     def avg_move_time(self) -> float:
         return (self.total_time_seconds / self.total_moves) if self.total_moves > 0 else 0.0
 
+    # Stats as a plain dictionary, for saving to JSON or CSV.
     def to_dict(self) -> Dict[str, Any]:
         return {
             "name": self.name,

@@ -8,9 +8,9 @@ from wordgrid.ui import theme
 from wordgrid.ui.controls import UnderlineTabs
 
 
+# A scored word in the match history.
 @dataclass
 class MatchedWordRecord:
-    """A scored word in the match history."""
     word: str
     length: int
     player: int  # 1 or 2
@@ -21,9 +21,9 @@ class MatchedWordRecord:
     timestamp: float = field(default_factory=time.time)
 
 
+# One entry of the full move log (zero-point moves included).
 @dataclass
 class MoveLogRecord:
-    """One entry of the full move log (zero-point moves included)."""
     move_number: int
     player: int
     player_name: str
@@ -40,15 +40,15 @@ TAB_LOG = "log"
 Record = Union[MatchedWordRecord, MoveLogRecord]
 
 
+# Scrollable match history with two tabs: scored words, and every move.
+#
+# Hovering or clicking an entry highlights its word on the board.
 class WordHistoryPanel:
-    """Scrollable match history with two tabs: scored words, and every move.
-
-    Hovering or clicking an entry highlights its word on the board.
-    """
 
     WORD_ROW_H = 50
     LOG_ROW_H = 32
 
+    # History panel with Words and Moves tabs, empty at the start.
     def __init__(self, rect: pygame.Rect, title_font=None, font=None, small_font=None):
         # Fonts are accepted for backwards compatibility; the theme provides typography.
         self.rect = rect
@@ -61,37 +61,41 @@ class WordHistoryPanel:
         self.tabs = UnderlineTabs(pygame.Rect(rect.x + 12, rect.y + 50, rect.width - 24, 38),
                                      ["Words", "All moves"], 0, on_change=self._on_tab)
 
+    # Name of the open tab.
     @property
     def active_tab(self) -> str:
         return TAB_WORDS if self.tabs.index == 0 else TAB_LOG
 
+    # Open a tab by name.
     @active_tab.setter
     def active_tab(self, tab: str) -> None:
         self.tabs.index = 0 if tab == TAB_WORDS else 1
         self._on_tab()
 
+    # Scroll to the top and clear the selection when the tab changes.
     def _on_tab(self, *args) -> None:
         self.scroll_y = 0.0
         self.selected_item = None
 
     # ------------------------------------------------------------------ data
+    # Adds a scored word (newest first).
     def add_match(self, word: str, length: int, player: int, player_name: str, move_number: int,
                   move: Tuple[int, int, str], occurrence_key: Optional[OccurrenceKey] = None) -> None:
-        """Adds a scored word (newest first)."""
         self.items.insert(0, MatchedWordRecord(word.upper(), length, player, player_name, move_number, move,
                                                occurrence_key))
         if self.active_tab == TAB_WORDS:
             self.scroll_y = 0.0
 
+    # Adds a move to the move log (newest first).
     def add_move(self, move_number: int, player: int, player_name: str, move: Tuple[int, int, str], points: int,
                  word: Optional[str] = None, occurrence_key: Optional[OccurrenceKey] = None,
                  blocked_words: Optional[List[str]] = None) -> None:
-        """Adds a move to the move log (newest first)."""
         self.log_items.insert(0, MoveLogRecord(move_number, player, player_name, move, points, word,
                                                occurrence_key, list(blocked_words or [])))
         if self.active_tab == TAB_LOG:
             self.scroll_y = 0.0
 
+    # Remove all entries.
     def clear(self) -> None:
         self.items.clear()
         self.log_items.clear()
@@ -100,9 +104,9 @@ class WordHistoryPanel:
         self.selected_item = None
         self._visible_rows.clear()
 
+    # Occurrence to highlight on the board (hovered entry first, then selected).
     @property
     def highlight_key(self) -> Optional[Tuple[str, int, OccurrenceKey]]:
-        """Occurrence to highlight on the board (hovered entry first, then selected)."""
         for item in (self.hovered_item, self.selected_item):
             if item is not None and item.occurrence_key:
                 word = item.word or ""
@@ -124,6 +128,7 @@ class WordHistoryPanel:
             elif event.button == 5:
                 self.scroll_y += 40
 
+    # Find the row under the mouse.
     def update(self) -> None:
         mouse = pygame.mouse.get_pos()
         self.hovered_item = None
@@ -138,6 +143,7 @@ class WordHistoryPanel:
         elif item is self.hovered_item:
             pygame.draw.rect(surface, col.SURFACE_ALT, rect)
 
+    # Draw one scored word row.
     def _render_word(self, surface, rect: pygame.Rect, item: MatchedWordRecord) -> None:
         self._row_background(surface, rect, item)
         theme.draw_swatch(surface, col.player_color(item.player), (rect.x + 14, rect.y + 17), 9)
@@ -151,6 +157,7 @@ class WordHistoryPanel:
         theme.draw_text(surface, f"+{item.length}", theme.font(theme.SIZE_HEADING, bold=True), col.TEXT,
                         (rect.right - 12, rect.centery), "midright")
 
+    # Draw one move row.
     def _render_log(self, surface, rect: pygame.Rect, item: MoveLogRecord) -> None:
         self._row_background(surface, rect, item)
         cy = rect.centery
@@ -171,6 +178,7 @@ class WordHistoryPanel:
         theme.draw_text(surface, result, theme.font(theme.SIZE_CAPTION, bold=item.points > 0), color,
                         (rect.right - 10, cy), "midright", max_width=150)
 
+    # Draw the panel, its tabs and the visible rows.
     def render(self, surface: pygame.Surface) -> None:
         self.update()
         theme.draw_card(surface, self.rect, border=col.BORDER_STRONG)

@@ -5,9 +5,10 @@ from typing import List, Dict
 from wordgrid.experiments.metrics import MatchResult, AgentTournamentStats
 
 
+# Exports tournament outcomes to CSV and JSON formats and renders ASCII tables.
 class ResultsExporter:
-    """Exports tournament outcomes to CSV and JSON formats and renders ASCII tables."""
 
+    # Save the summary and every match to a JSON file.
     @staticmethod
     def export_to_json(
         matches: List[MatchResult],
@@ -41,6 +42,7 @@ class ResultsExporter:
         with open(filepath, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
 
+    # Save one row of stats per agent to a CSV file.
     @staticmethod
     def export_to_csv(
         agent_stats: Dict[str, AgentTournamentStats],
@@ -67,6 +69,7 @@ class ResultsExporter:
             for stats in agent_stats.values():
                 writer.writerow(stats.to_dict())
 
+    # Build a text table of the agents' stats for the console.
     @staticmethod
     def format_summary_table(agent_stats: Dict[str, AgentTournamentStats]) -> str:
         headers = [
@@ -96,6 +99,7 @@ class ResultsExporter:
 
         col_widths = [max(len(h), max((len(r[i]) for r in rows), default=0)) for i, h in enumerate(headers)]
 
+        # Pad each cell to its column width and join with bars.
         def fmt_row(row_items):
             return " | ".join(item.ljust(col_widths[i]) for i, item in enumerate(row_items))
 

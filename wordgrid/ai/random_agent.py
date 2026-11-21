@@ -7,16 +7,19 @@ from wordgrid.game.scoring import WordValidatorProtocol
 from wordgrid.ai.base_agent import BaseAgent
 
 
+# Baseline agent that chooses uniformly at random among all legal moves.
 class RandomAgent(BaseAgent):
-    """Baseline agent that chooses uniformly at random among all legal moves."""
 
+    # Create the agent with its own random generator.
     def __init__(self, name: str = "Random", seed: Optional[int] = None, rules: Optional[GameRules] = None):
         super().__init__(name, rules)
         self.rng = random.Random(seed)
 
+    # Reset the random generator so a game can be repeated.
     def set_seed(self, seed: Optional[int]) -> None:
         self.rng = random.Random(seed)
 
+    # Return a random legal move.
     def select_move(self, state: GameState, validator: WordValidatorProtocol) -> Move:
         start_time = time.perf_counter()
         legal_moves = self.rules.get_legal_moves(state)

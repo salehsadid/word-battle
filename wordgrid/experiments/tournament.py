@@ -8,9 +8,10 @@ from wordgrid.config import GameConfig
 from wordgrid.experiments.metrics import MatchResult, AgentTournamentStats
 
 
+# Orchestrates automated tournaments between AI algorithms with alternating starts.
 class TournamentRunner:
-    """Orchestrates automated tournaments between AI algorithms with alternating starts."""
 
+    # Keep the dictionary, the match settings and a game engine.
     def __init__(
         self,
         validator: WordValidatorProtocol,
@@ -20,12 +21,12 @@ class TournamentRunner:
         self.config = config or GameConfig()
         self.engine = GameEngine(validator=self.validator, config=self.config)
 
+    # Executes a full match between agent1 (as P1) and agent2 (as P2).
     def play_single_match(
         self,
         agent1: BaseAgent,
         agent2: BaseAgent,
     ) -> MatchResult:
-        """Executes a full match between agent1 (as P1) and agent2 (as P2)."""
         state = self.engine.reset(self.config)
         # Both agents simulate with the engine's authoritative rules
         agent1.bind_rules(self.engine.rules)
@@ -94,12 +95,12 @@ class TournamentRunner:
             p2_moves=p2_moves,
         )
 
+    # Runs a round-robin tournament across all agent pairs with alternating starts.
     def run_tournament(
         self,
         agents: List[BaseAgent],
         games_per_pairing: int = 2,
     ) -> Tuple[List[MatchResult], Dict[str, AgentTournamentStats]]:
-        """Runs a round-robin tournament across all agent pairs with alternating starts."""
         agent_stats: Dict[str, AgentTournamentStats] = {
             a.name: AgentTournamentStats(name=a.name) for a in agents
         }

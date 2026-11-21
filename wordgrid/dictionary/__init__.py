@@ -1,4 +1,4 @@
-"""Dictionary subsystem for WordGrid."""
+# Dictionary subsystem for WordGrid.
 
 from wordgrid.dictionary.trie import Trie, TrieNode
 from wordgrid.dictionary.cleaner import DictionaryCleaner, IRREGULAR_PLURAL_MAP, PRESERVED_SINGULARS

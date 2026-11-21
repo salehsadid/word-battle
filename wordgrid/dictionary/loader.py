@@ -26,16 +26,17 @@ TEST_VOCABULARY = [
 ]
 
 
+# Manages loading, offline caching, and preprocessing of English word dictionaries.
 class DictionaryLoader:
-    """Manages loading, offline caching, and preprocessing of English word dictionaries."""
 
+    # Create the data folder if it does not exist.
     @staticmethod
     def ensure_data_directory():
         DATA_DIR.mkdir(parents=True, exist_ok=True)
 
+    # Creates the default test dictionary file if it doesn't already exist.
     @classmethod
     def create_default_test_file(cls, path: Optional[Path] = None) -> Path:
-        """Creates the default test dictionary file if it doesn't already exist."""
         cls.ensure_data_directory()
         target = path or TEST_DICT_PATH
         if not target.exists():
@@ -44,9 +45,9 @@ class DictionaryLoader:
                     f.write(f"{word}\n")
         return target
 
+    # Loads and normalizes uppercase words from a text file.
     @classmethod
     def load_words_from_file(cls, file_path: Path) -> Set[str]:
-        """Loads and normalizes uppercase words from a text file."""
         if not file_path.exists():
             raise FileNotFoundError(
                 f"Dictionary file not found at: {file_path}\n"
@@ -60,6 +61,7 @@ class DictionaryLoader:
                     words.add(w)
         return words
 
+    # Preprocesses the raw word list and saves the cleaned dictionary locally.
     @classmethod
     def prepare_and_clean_dictionary(
         cls,
@@ -67,7 +69,6 @@ class DictionaryLoader:
         cleaned_path: Optional[Path] = None,
         min_word_length: int = 2,
     ) -> Tuple[Set[str], Dict[str, Any]]:
-        """Preprocesses the raw word list and saves the cleaned dictionary locally."""
         cls.ensure_data_directory()
         raw_p = raw_path or RAW_DICT_PATH
         cleaned_p = cleaned_path or CLEANED_DICT_PATH
@@ -88,6 +89,7 @@ class DictionaryLoader:
 
         return accepted_words, stats
 
+    # Loads accepted dictionary into a WordValidator.
     @classmethod
     def load_dictionary(
         cls,
@@ -95,11 +97,6 @@ class DictionaryLoader:
         force_clean: bool = False,
         min_word_length: int = 2,
     ) -> Tuple[WordValidator, Dict[str, Any]]:
-        """Loads accepted dictionary into a WordValidator.
-        
-        If cleaned dictionary already exists and force_clean is False, loads it directly.
-        Otherwise performs the one-time cleaning and stores the result locally.
-        """
         cls.ensure_data_directory()
         cleaned_p = dict_path or CLEANED_DICT_PATH
 
@@ -123,9 +120,9 @@ class DictionaryLoader:
 
         return WordValidator(trie), stats
 
+    # Loads a clean test dictionary for deterministic unit tests.
     @classmethod
     def load_test_dictionary(cls) -> WordValidator:
-        """Loads a clean test dictionary for deterministic unit tests."""
         cls.create_default_test_file()
         words = cls.load_words_from_file(TEST_DICT_PATH)
         cleaner = DictionaryCleaner(words)

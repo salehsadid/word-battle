@@ -12,18 +12,15 @@ END_MOVE_LIMIT = "move limit reached"
 END_BOARD_FULL = "board full"
 
 
+# Implements authoritative rules, legal moves, state transitions, and termination checks.
 class GameRules:
-    """Implements authoritative rules, legal moves, state transitions, and termination checks."""
 
+    # Use the given scoring system, or the default one.
     def __init__(self, scoring_system: Optional[ScoringSystem] = None):
         self.scoring = scoring_system or ScoringSystem()
 
+    # Generates all legal moves for the current state.
     def get_legal_moves(self, state: GameState) -> List[Move]:
-        """Generates all legal moves for the current state.
-        
-        If the game is over, returns an empty list.
-        Otherwise returns every (row, col, letter) where (row, col) is empty and letter in A-Z.
-        """
         if state.is_terminal:
             return []
 
@@ -34,8 +31,8 @@ class GameRules:
                 moves.append((r, c, ch))
         return moves
 
+    # Validates if a move is legal in the current state.
     def is_legal_move(self, state: GameState, move: Move) -> bool:
-        """Validates if a move is legal in the current state."""
         if state.is_terminal:
             return False
         r, c, ch = move
@@ -47,21 +44,12 @@ class GameRules:
             return False
         return True
 
+    # Checks if state has reached a terminal condition based on game_mode.
     def check_termination(self, state: GameState) -> Tuple[bool, Optional[int]]:
-        """Checks if state has reached a terminal condition based on game_mode.
-
-        - Target score: the first player to reach goal_score wins immediately.
-        - Move limit: ends once *each* player has made move_limit moves; highest score wins.
-        - Full board (any mode): ends when no empty cells remain; highest score wins.
-        Equal scores at the end are a draw.
-
-        Returns:
-            (is_terminal, winner) where winner is 1, 2, 0 (draw), or None if not terminal.
-            The reason is stored on state.end_reason by the transition functions.
-        """
         terminal, winner, _ = self._termination_details(state)
         return terminal, winner
 
+    # Check the end rules; returns (game over?, winner, reason).
     def _termination_details(self, state: GameState) -> Tuple[bool, Optional[int], Optional[str]]:
         if state.game_mode == MODE_REACH_GOAL_SCORE:
             reached = [p for p in (1, 2) if state.scores.get(p, 0) >= state.goal_score]
@@ -78,6 +66,7 @@ class GameRules:
 
         return False, None, None
 
+    # Player with more points, or 0 for a draw.
     @staticmethod
     def _winner_by_score(state: GameState) -> int:
         p1_score = state.scores.get(1, 0)
@@ -88,16 +77,13 @@ class GameRules:
             return 2
         return 0  # Draw
 
+    # Applies a legal move to a state and returns a new simulated/transitioned GameState.
     def apply_move(
         self,
         state: GameState,
         move: Move,
         validator: WordValidatorProtocol,
     ) -> GameState:
-        """Applies a legal move to a state and returns a new simulated/transitioned GameState.
-        
-        Leaves the input state unmodified.
-        """
         r, c, ch = move
         ch = ch.upper()
         if not self.is_legal_move(state, (r, c, ch)):
@@ -145,17 +131,13 @@ class GameRules:
 
         return next_state
 
+    # Applies move in place to state for performance-critical search when undo is needed.
     def apply_move_inplace(
         self,
         state: GameState,
         move: Move,
         validator: WordValidatorProtocol,
     ) -> Tuple[int, List[Tuple[str, int, OccurrenceKey]], int]:
-        """Applies move in place to state for performance-critical search when undo is needed.
-        
-        Returns:
-            (move_score, new_words, previous_player)
-        """
         r, c, ch = move
         ch = ch.upper()
         state.board.set(r, c, ch)
@@ -193,6 +175,7 @@ class GameRules:
 
         return move_score, new_words, prev_player
 
+    # Reverts in-place move application.
     def undo_move_inplace(
         self,
         state: GameState,
@@ -203,7 +186,6 @@ class GameRules:
         prev_last_move: Optional[Move],
         prev_last_scored: List[Tuple[str, int]],
     ) -> None:
-        """Reverts in-place move application."""
         r, c, _ = move
         state.board.clear_cell(r, c)
 

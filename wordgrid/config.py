@@ -50,8 +50,8 @@ class GameConfig:
     starting_player: int = 1
     dictionary_path: Path = CLEANED_DICT_PATH
 
+    # Returns a list of human readable problems (empty when valid).
     def validate(self) -> List[str]:
-        """Returns a list of human readable problems (empty when valid)."""
         errors: List[str] = []
         if not (MIN_BOARD_SIZE <= self.board_size <= MAX_BOARD_SIZE):
             errors.append(f"Board size must be between {MIN_BOARD_SIZE} and {MAX_BOARD_SIZE}.")

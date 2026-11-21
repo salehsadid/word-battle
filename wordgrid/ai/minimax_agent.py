@@ -8,12 +8,12 @@ from wordgrid.ai.evaluation import HeuristicEvaluator
 from wordgrid.ai.move_ordering import MoveOrdering
 
 
+# Depth-limited plain Minimax (no pruning) with heuristic evaluation.
+#
+# Kept as a reference implementation: AlphaBetaAgent must reach the same root value.
 class MinimaxAgent(BaseAgent):
-    """Depth-limited plain Minimax (no pruning) with heuristic evaluation.
 
-    Kept as a reference implementation: AlphaBetaAgent must reach the same root value.
-    """
-
+    # Set the search depth, evaluator and move ordering.
     def __init__(
         self,
         name: str = "Minimax",
@@ -30,11 +30,13 @@ class MinimaxAgent(BaseAgent):
         self.candidate_k = candidate_k
         self.nodes_visited = 0
 
+    # Use the match's rules and give the same scoring to the evaluator and move ordering.
     def bind_rules(self, rules: GameRules) -> None:
         super().bind_rules(rules)
         self.evaluator.set_scoring(rules.scoring)
         self.move_orderer.set_scoring(rules.scoring)
 
+    # Run plain Minimax from the current state and return the best move.
     def select_move(self, state: GameState, validator: WordValidatorProtocol) -> Move:
         start_time = time.perf_counter()
         self.nodes_visited = 0
@@ -69,6 +71,7 @@ class MinimaxAgent(BaseAgent):
         }
         return best_move
 
+    # Plain Minimax (no pruning); returns (value, best move) for this node.
     def _minimax(
         self,
         state: GameState,

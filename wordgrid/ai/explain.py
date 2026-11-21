@@ -5,16 +5,13 @@ from wordgrid.game.scoring import WordValidatorProtocol, direction_label
 from wordgrid.ai.move_ordering import OpportunityScanner
 
 
+# Facts about a chosen move used for AI explanations (does not mutate state).
 def describe_move(
     rules: GameRules,
     state: GameState,
     move: Move,
     validator: WordValidatorProtocol,
 ) -> Dict[str, Any]:
-    """Facts about a chosen move used for AI explanations (does not mutate state).
-
-    Returns keys: immediate_score, word, direction, denied_points, opponent_best_reply, summary.
-    """
     scanner = OpportunityScanner(rules.scoring)
     r, c, ch = move
 

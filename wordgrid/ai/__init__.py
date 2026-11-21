@@ -1,4 +1,4 @@
-"""AI agents subsystem for WordGrid."""
+# AI agents subsystem for WordGrid.
 
 from wordgrid.ai.base_agent import BaseAgent
 from wordgrid.ai.random_agent import RandomAgent

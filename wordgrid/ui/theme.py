@@ -1,4 +1,4 @@
-"""Fonts and drawing helpers shared by every screen (cards, text, icons, tooltips)."""
+# Fonts and drawing helpers shared by every screen (cards, text, icons, tooltips).
 
 import math
 import os
@@ -40,6 +40,7 @@ _SHAPES: Dict[tuple, pygame.Surface] = {}
 _CLEAR = (255, 255, 255, 0)  # transparent *white*, so smoothing never darkens the edges
 
 
+# Cached copy of a shape mask filled with a colour.
 def _coloured(mask_key: tuple, mask_fn, color) -> pygame.Surface:
     color = pygame.Color(color)
     key = (mask_key, tuple(color))
@@ -57,6 +58,7 @@ def _coloured(mask_key: tuple, mask_fn, color) -> pygame.Surface:
     return shape
 
 
+# Draw a filled rectangle with per-corner radii.
 def _filled_round_rect(surface, color, rect: pygame.Rect, radii) -> None:
     if rect.width > 0 and rect.height > 0:
         tl, tr, bl, br = radii
@@ -64,10 +66,10 @@ def _filled_round_rect(surface, color, rect: pygame.Rect, radii) -> None:
                          border_bottom_left_radius=bl, border_bottom_right_radius=br)
 
 
+# Drop-in for pygame.draw.rect with smooth rounded corners.
 def aa_rect(surface, color, rect, width: int = 0, border_radius: int = 0, border_top_left_radius: int = -1,
             border_top_right_radius: int = -1, border_bottom_left_radius: int = -1,
             border_bottom_right_radius: int = -1) -> pygame.Rect:
-    """Drop-in for pygame.draw.rect with smooth rounded corners."""
     rect = pygame.Rect(rect)
     radii = tuple(r if r >= 0 else border_radius for r in (border_top_left_radius, border_top_right_radius,
                                                           border_bottom_left_radius, border_bottom_right_radius))
@@ -75,6 +77,7 @@ def aa_rect(surface, color, rect, width: int = 0, border_radius: int = 0, border
         return pygame.draw.rect(surface, color, rect, width)
     size = rect.size
 
+    # Draw the shape at a larger size, then scale down for smooth edges.
     def make():
         ss = SUPERSAMPLE
         big = pygame.Surface((size[0] * ss, size[1] * ss), pygame.SRCALPHA)
@@ -92,13 +95,14 @@ def aa_rect(surface, color, rect, width: int = 0, border_radius: int = 0, border
     return rect
 
 
+# Drop-in for pygame.draw.circle with smooth edges.
 def aa_circle(surface, color, center, radius, width: int = 0) -> pygame.Rect:
-    """Drop-in for pygame.draw.circle with smooth edges."""
     radius = int(radius)
     if radius < 2:
         return pygame.draw.circle(surface, color, center, radius, width)
     d = radius * 2 + 2
 
+    # Draw the circle at a larger size, then scale down for smooth edges.
     def make():
         ss = SUPERSAMPLE
         big = pygame.Surface((d * ss, d * ss), pygame.SRCALPHA)
@@ -113,6 +117,7 @@ def aa_circle(surface, color, center, radius, width: int = 0) -> pygame.Rect:
     return surface.blit(shape, shape.get_rect(center=(round(center[0]), round(center[1]))))
 
 
+# Load a font once and reuse it.
 def _load(face: str, size: int) -> pygame.font.Font:
     key = (face, size)
     if key not in _FONTS:
@@ -135,8 +140,8 @@ def _load(face: str, size: int) -> pygame.font.Font:
     return _FONTS[key]
 
 
+# Sans-serif UI font. Small regular text uses semibold so it stays legible.
 def font(size: int, bold: bool = False) -> pygame.font.Font:
-    """Sans-serif UI font. Small regular text uses semibold so it stays legible."""
     if bold:
         return _load("sans_bold", size)
     if size <= SIZE_CAPTION:
@@ -144,40 +149,41 @@ def font(size: int, bold: bool = False) -> pygame.font.Font:
     return _load("sans", size)
 
 
+# Semibold sans: sturdier than regular, lighter than bold.
 def semibold(size: int) -> pygame.font.Font:
-    """Semibold sans: sturdier than regular, lighter than bold."""
     return _load("sans_semibold", size)
 
 
+# Georgia: titles and headlines.
 def serif(size: int, bold: bool = True) -> pygame.font.Font:
-    """Georgia: titles and headlines."""
     return _load("serif_bold" if bold else "serif", size)
 
 
+# Franklin Gothic: section labels, letter tiles and keys.
 def label(size: int) -> pygame.font.Font:
-    """Franklin Gothic: section labels, letter tiles and keys."""
     return _load("label", size)
 
 
+# Small upper-case section label ("PLAYERS", "MATCH").
 def draw_label(surface, text: str, pos, color=None, size: int = 13, anchor: str = "topleft") -> pygame.Rect:
-    """Small upper-case section label ("PLAYERS", "MATCH")."""
     return draw_text(surface, text.upper(), label(size), color if color is not None else col.TEXT_SUBTLE, pos, anchor)
 
 
+# The wordmark: 'WordBattle' set in Georgia Bold. `tile` sets the cap height (kept for old callers).
 def draw_logo(surface, pos, tile: int = 34, gap: int = 4) -> pygame.Rect:
-    """The wordmark: 'WordBattle' set in Georgia Bold. `tile` sets the cap height (kept for old callers)."""
     r = draw_text(surface, "WordBattle", serif(int(tile * 1.1)), col.TEXT, (pos[0], pos[1] + tile // 2), "midleft")
     return pygame.Rect(pos[0], pos[1], r.width, tile)
 
 
+# Small solid square marking a player's colour.
 def draw_swatch(surface, color, center, size: int = 12) -> pygame.Rect:
-    """Small solid square marking a player's colour."""
     rect = pygame.Rect(0, 0, size, size)
     rect.center = (round(center[0]), round(center[1]))
     pygame.draw.rect(surface, color, rect)
     return rect
 
 
+# Shorten text with '...' so it fits the width.
 def truncate(fnt: pygame.font.Font, text: str, width: int) -> str:
     if fnt.size(text)[0] <= width:
         return text
@@ -186,6 +192,7 @@ def truncate(fnt: pygame.font.Font, text: str, width: int) -> str:
     return text.rstrip() + "..."
 
 
+# Draw text at a position and return its rectangle.
 def draw_text(surface, text, fnt, color, pos, anchor: str = "topleft", max_width: int = 0) -> pygame.Rect:
     if max_width:
         text = truncate(fnt, text, max_width)
@@ -195,8 +202,8 @@ def draw_text(surface, text, fnt, color, pos, anchor: str = "topleft", max_width
     return rect
 
 
+# Flat panel: white fill and a hairline border (no shadow unless asked for).
 def draw_card(surface, rect, fill=None, border=None, radius: int = RADIUS, shadow: bool = False, width: int = 1):
-    """Flat panel: white fill and a hairline border (no shadow unless asked for)."""
     radius = min(radius, RADIUS)
     if shadow:
         aa_rect(surface, col.SHADOW, rect.move(0, 2), border_radius=radius)
@@ -205,17 +212,19 @@ def draw_card(surface, rect, fill=None, border=None, radius: int = RADIUS, shado
         aa_rect(surface, border if border is not None else col.BORDER, rect, width=width, border_radius=radius)
 
 
+# Horizontal printed rule.
 def rule(surface, x1: int, x2: int, y: int, width: int = 1, color=None) -> None:
-    """Horizontal printed rule."""
     pygame.draw.rect(surface, color if color is not None else col.BORDER, (x1, y, x2 - x1, width))
 
 
+# Dim the whole screen behind a dialog.
 def draw_overlay(surface) -> None:
     shade = pygame.Surface(surface.get_size(), pygame.SRCALPHA)
     shade.fill(col.OVERLAY)
     surface.blit(shade, (0, 0))
 
 
+# Draw a small dark label near the mouse.
 def draw_tooltip(surface, text: str, pos: Tuple[int, int]) -> None:
     fnt = font(SIZE_CAPTION)
     surf = fnt.render(text, True, col.TEXT_ON_ACCENT)
@@ -226,14 +235,15 @@ def draw_tooltip(surface, text: str, pos: Tuple[int, int]) -> None:
     surface.blit(surf, (rect.x + 8, rect.y + 4))
 
 
+# Draw a coloured circle with the name's initials.
 def draw_avatar(surface, center, radius: int, name: str, color) -> None:
     aa_circle(surface, color, center, radius)
     initials = "".join(w[0] for w in name.split()[:2]).upper() or "?"
     draw_text(surface, initials, font(max(11, radius - 2), bold=True), col.TEXT_ON_ACCENT, center, "center")
 
 
+# Small vector icons (no icon font needed).
 def draw_icon(surface, name: str, center, size: int, color) -> None:
-    """Small vector icons (no icon font needed)."""
     cx, cy = center
     s = size / 2
     w = max(2, size // 8)

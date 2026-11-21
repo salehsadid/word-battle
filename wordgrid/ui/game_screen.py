@@ -37,16 +37,18 @@ TOAST_SECONDS = 1.8
 TOOLTIP_DELAY = 0.6
 
 
+# Small A-Z panel that pops up next to the selected square.
 class LetterPicker:
-    """Small A-Z panel that pops up next to the selected square."""
 
     COLS, KEY, GAP, PAD, HEADER = 7, 36, 5, 12, 26
 
+    # Create the hidden A-Z popup.
     def __init__(self):
         self.visible = False
         self.rect = pygame.Rect(0, 0, 0, 0)
         self.keys: List[Tuple[str, pygame.Rect]] = []
 
+    # Show the popup next to the selected square, kept inside the board area.
     def open(self, anchor: pygame.Rect, bounds: pygame.Rect) -> None:
         rows = (26 + self.COLS - 1) // self.COLS
         w = 2 * self.PAD + self.COLS * self.KEY + (self.COLS - 1) * self.GAP
@@ -64,14 +66,17 @@ class LetterPicker:
             self.keys.append((ch, key))
         self.visible = True
 
+    # Hide the popup.
     def close(self) -> None:
         self.visible = False
 
+    # Letter key under the mouse, or None.
     def letter_at(self, pos) -> Optional[str]:
         if not self.visible:
             return None
         return next((ch for ch, r in self.keys if r.collidepoint(pos)), None)
 
+    # Draw the popup and its 26 letter keys.
     def render(self, surface: pygame.Surface) -> None:
         if not self.visible:
             return
@@ -85,9 +90,10 @@ class LetterPicker:
             theme.draw_text(surface, ch, fnt, col.TEXT_ON_ACCENT if hover else col.TEXT, r.center, "center")
 
 
+# Runs a match: human input, non-blocking AI turns, history, and the result screen.
 class GameScreen:
-    """Runs a match: human input, non-blocking AI turns, history, and the result screen."""
 
+    # Build the game screen: panels, buttons, dialogs and the first match.
     def __init__(
         self,
         settings: MatchSettings,
@@ -167,6 +173,7 @@ class GameScreen:
         level = "custom settings" if p.difficulty == DIFFICULTY_CUSTOM else p.difficulty
         return f"Computer · {level}"
 
+    # Start a fresh match and ignore any AI search that is still running.
     def _new_match(self) -> None:
         with self._lock:
             self._generation += 1
@@ -191,12 +198,12 @@ class GameScreen:
         self.auto_play = True
         self.btn_pause.text = "Pause"
 
+    # Restarts with the same settings.
     def reset_match(self) -> None:
-        """Restarts with the same settings."""
         self._new_match()
 
+    # Invalidates any running AI search (its result will be ignored).
     def shutdown(self) -> None:
-        """Invalidates any running AI search (its result will be ignored)."""
         with self._lock:
             self._generation += 1
             self.pending_ai_move = None
@@ -205,6 +212,7 @@ class GameScreen:
     def _in_progress(self) -> bool:
         return self.engine.state.move_count > 0 and not self.engine.is_game_over
 
+    # Ask before leaving a match in progress; otherwise go back to the menu.
     def _ask_leave(self) -> None:
         if self._in_progress():
             self.confirm.open("Exit this match?", "The current game will be lost. Your settings are kept.",
@@ -212,6 +220,7 @@ class GameScreen:
         else:
             self.on_back_to_menu()
 
+    # Ask before restarting a match in progress; otherwise restart now.
     def _ask_restart(self) -> None:
         if self._in_progress():
             self.confirm.open("Restart the match?", "The board will be cleared and both scores reset to 0.",
@@ -219,34 +228,42 @@ class GameScreen:
         else:
             self.reset_match()
 
+    # Show a short message for a few seconds.
     def _flash_message(self, text: str, seconds: float = 3.0) -> None:
         self.message = (text, time.time() + seconds)
 
+    # Hide the result card so the final board can be seen.
     def _dismiss_overlay(self) -> None:
         self.overlay_dismissed = True
 
+    # Show or hide the AI's technical details.
     def _toggle_details(self) -> None:
         self.show_details = not self.show_details
 
+    # Pause or resume an AI-vs-AI match.
     def toggle_pause(self) -> None:
         self.auto_play = not self.auto_play
         self.btn_pause.text = "Pause" if self.auto_play else "Resume"
 
+    # Plays exactly one AI move (useful while paused).
     def step_ai_move(self) -> None:
-        """Plays exactly one AI move (useful while paused)."""
         if self.engine.is_game_over or self.ai_searching or not self.current_agent_is_ai():
             return
         self._trigger_ai_search()
 
+    # True if the computer plays the current turn.
     def current_agent_is_ai(self) -> bool:
         return self.get_current_ai_agent() is not None
 
+    # AI agent for the current turn, or None for a human.
     def get_current_ai_agent(self) -> Optional[BaseAgent]:
         return self.agents.get(self.engine.state.current_player)
 
+    # True if a human should move now.
     def _human_turn(self) -> bool:
         return not self.current_agent_is_ai() and not self.engine.is_game_over
 
+    # 'Your' for the human player, otherwise the player's name.
     def _turn_owner(self, pid: int) -> str:
         if self.settings.match_type == MATCH_HUMAN_VS_AI and self.settings.player(pid).is_human:
             return "Your"
@@ -261,6 +278,7 @@ class GameScreen:
         state_clone = self.engine.state.clone()
         generation = self._generation
 
+        # Background thread: ask the agent for a move and store the result.
         def _worker():
             try:
                 move = agent.select_move(state_clone, self.validator)
@@ -305,6 +323,7 @@ class GameScreen:
         self.picker.close()
         self.last_move_time = now
 
+    # Play the human's letter if the move is legal, otherwise show a message.
     def _apply_human_move(self, r: int, c: int, letter: str) -> None:
         move = (r, c, letter.upper())
         if not self.engine.rules.is_legal_move(self.engine.state, move):
@@ -314,6 +333,7 @@ class GameScreen:
         self.engine.make_move(move)
         self._after_move(player)
 
+    # Select a square and open the letter picker next to it.
     def _select_cell(self, cell: Optional[Tuple[int, int]]) -> None:
         self.board_renderer.selected_cell = cell
         if cell is None:
@@ -326,6 +346,7 @@ class GameScreen:
     def _overlay_visible(self) -> bool:
         return self.engine.is_game_over and not self.overlay_dismissed
 
+    # Handle keys, clicks and typed letters on the game screen.
     def handle_event(self, event: pygame.event.Event) -> None:
         if self.help.handle_event(event) or self.confirm.handle_event(event):
             return
@@ -386,6 +407,7 @@ class GameScreen:
             self._select_cell(None)
             self._flash_message("That square is taken. Pick an empty one.")
 
+    # Move the selected square with the arrow keys.
     def _move_selection(self, key: int) -> None:
         size = self.engine.state.board.size
         current = self.board_renderer.selected_cell
@@ -440,6 +462,7 @@ class GameScreen:
             return f"{owner} turn: choose a letter for {cell_label(r, c)}", accent, soft
         return f"{owner} turn: click an empty square", accent, soft
 
+    # Title, text and colour for the panel that explains the last move.
     def _insight_content(self) -> Tuple[str, str, Optional[str], pygame.Color, bool]:
         state = self.engine.state
         if self.ai_error:
@@ -482,6 +505,7 @@ class GameScreen:
         self.btn_back.render(surface)
         theme.rule(surface, 40, 1060, 66, width=2, color=col.TEXT)
 
+    # Draw the status line above the board.
     def _render_banner(self, surface) -> None:
         text, accent, _ = self._banner()
         rect = self.banner_rect
@@ -489,6 +513,7 @@ class GameScreen:
         theme.draw_text(surface, text, theme.font(theme.SIZE_HEADING, bold=True), col.TEXT,
                         (rect.x + 24, rect.centery), "midleft", max_width=rect.width - 30)
 
+    # Draw the fading message, if any.
     def _render_toast(self, surface) -> None:
         if not self.toast:
             return
@@ -508,6 +533,7 @@ class GameScreen:
         layer.blit(surf, surf.get_rect(center=layer.get_rect().center))
         surface.blit(layer, rect)
 
+    # Draw a tooltip for the square under the mouse.
     def _render_tooltip(self, surface) -> None:
         board = self.engine.state.board
         mouse = pygame.mouse.get_pos()
@@ -524,6 +550,7 @@ class GameScreen:
         text = f"Row {r + 1}, column {c + 1}" + (f"  ·  {letter}" if letter else "")
         theme.draw_tooltip(surface, text, mouse)
 
+    # Update and draw the Restart, Pause and Step buttons.
     def _render_controls(self, surface) -> None:
         self.btn_reset.text = "Play again" if self.engine.is_game_over else "Restart"
         self.btn_pause.enabled = self.btn_step.enabled = not self.engine.is_game_over
@@ -534,6 +561,7 @@ class GameScreen:
             theme.draw_text(surface, self.message[0], theme.font(theme.SIZE_CAPTION, bold=True), col.DANGER,
                             (40, 714), max_width=520)
 
+    # Draw the end-of-match card with the winner and final score.
     def _render_result(self, surface) -> None:
         state = self.engine.state
         theme.draw_overlay(surface)
@@ -598,6 +626,7 @@ class GameScreen:
         for btn in (self.btn_view, self.btn_new, self.btn_rematch):
             btn.render(surface)
 
+    # Draw the whole game screen.
     def render(self, surface: pygame.Surface) -> None:
         surface.fill(col.BG)
         state = self.engine.state

@@ -31,6 +31,7 @@ from wordgrid.settings import (
 )
 
 
+# Load the dictionary from --dict, or the default word list.
 def _load_validator(args):
     path = Path(args.dict) if args.dict else CLEANED_DICT_PATH
     if path == CLEANED_DICT_PATH:
@@ -40,6 +41,7 @@ def _load_validator(args):
     return validator, stats, path
 
 
+# Run an AI tournament in the console and save the results.
 def run_cli_tournament(args):
     print("=" * 60)
     print("WordBattle - Automated AI Tournament Benchmark")
@@ -84,6 +86,7 @@ def run_cli_tournament(args):
     print(f"Exported metrics to:\n  {json_path}\n  {csv_path}")
 
 
+# Map an agent name from the command line to a controller type.
 def _controller(name: str) -> str:
     n = name.lower()
     if "mcts" in n:
@@ -95,6 +98,7 @@ def _controller(name: str) -> str:
     return CONTROLLER_HUMAN
 
 
+# Play one AI-vs-AI match in the console and print each move.
 def run_cli_match(args):
     print("=" * 60)
     print("WordBattle - CLI Match Runner")
@@ -179,6 +183,7 @@ def run_cli_match(args):
     print("=" * 60)
 
 
+# Read the command-line options and start the GUI, a CLI match or a tournament.
 def main():
     parser = argparse.ArgumentParser(description="WordBattle - Strategic Word Grid Game with AI")
     parser.add_argument("--cli", action="store_true", help="Run in CLI mode instead of Pygame GUI")

@@ -1,4 +1,4 @@
-"""Pre-match settings: a two-column player setup, shared match settings and an Advanced options sheet."""
+# Pre-match settings: a two-column player setup, shared match settings and an Advanced options sheet.
 
 import pygame
 from typing import Callable, List, Optional, Tuple
@@ -65,9 +65,10 @@ FORM_X, FORM_W = 300, 440
 FORM_ROWS_Y = (478, 532, 586)          # board size / game ends / first move
 
 
+# One side of the match: whether a person or the computer plays it, and how.
 class _PlayerPanel:
-    """One side of the match: whether a person or the computer plays it, and how."""
 
+    # Build the controls for one player: Human/Computer, name, algorithm and level.
     def __init__(self, pid: int, name: str, human: bool, algo_idx: int, on_change: Callable[..., None]):
         self.pid = pid
         self.accent = col.player_color(pid)
@@ -80,23 +81,27 @@ class _PlayerPanel:
         self.seg_algo = SegmentedControl(row(ROW1_Y), ALGO_NAMES, algo_idx, on_change=on_change)
         self.seg_diff = SegmentedControl(row(ROW2_Y), DIFFICULTIES, 1, on_change=on_change)
 
+    # True if this player is set to Human.
     @property
     def is_human(self) -> bool:
         return self.seg_ctrl.index == 0
 
+    # Selected algorithm (Minimax or MCTS).
     @property
     def controller(self) -> str:
         return ALGO_CONTROLLERS[self.seg_algo.index]
 
+    # Controls shown for this player right now.
     def widgets(self) -> list:
         if self.is_human:
             return [self.seg_ctrl, self.inp_name]
         return [self.seg_ctrl, self.seg_algo, self.seg_diff]
 
 
+# Friendly settings screen: set up each player, pick the shared rules, then press Start.
 class MenuScreen:
-    """Friendly settings screen: set up each player, pick the shared rules, then press Start."""
 
+    # Build the setup screen and load the saved settings.
     def __init__(
         self,
         on_start_match: Callable[[MatchSettings], None],
@@ -141,10 +146,11 @@ class MenuScreen:
                                    callback=self._open_advanced)
         self.btn_bench = Button(pygame.Rect(252, 692, 150, 44), "AI benchmark", variant="secondary",
                                 callback=self._handle_tournament_click,
-                                tooltip="All AIs play each other on this board; results go to data/")
+                                tooltip="Minimax vs MCTS, 4 games on this board; results are saved")
         self.btn_start = Button(pygame.Rect(860, 690, 180, 48), "Start game", variant="primary",
                                 font=theme.font(theme.SIZE_HEADING, bold=True), callback=self._handle_start_click)
 
+    # Stepper for the target score or move limit, if the end rule needs one.
     def _goal_stepper(self) -> Optional[Stepper]:
         mode = LENGTH_MODES[self.seg_length.index]
         if mode == MODE_REACH_GOAL_SCORE:
@@ -153,8 +159,8 @@ class MenuScreen:
             return self.step_limit
         return None
 
+    # Apply a preset (who is human on each side).
     def _set_mode(self, mode: str) -> None:
-        """Apply a preset (who is human on each side)."""
         for panel, human in zip(self.panels, MODE_HUMANS[mode]):
             panel.seg_ctrl.index = 0 if human else 1
             panel.inp_name.focused = False
@@ -168,7 +174,9 @@ class MenuScreen:
         self.adv_card = pygame.Rect(150, 60, 800, 640)
         self.seg_adv_tab = UnderlineTabs(r, ["General", "Minimax", "MCTS"], 0)
 
+        # Make a callback that turns custom search settings on or off.
         def set_override(ctrl):
+            # Store the switch value and refresh the screen.
             def _f(value):
                 self.override[ctrl] = value
                 self._refresh()
@@ -207,8 +215,8 @@ class MenuScreen:
                                     callback=self._reset_advanced)
         self.btn_adv_done = Button(r, "Done", variant="primary", callback=self._close_advanced)
 
+    # (label, hint, widget) rows for the active tab; widget None = section header.
     def _advanced_rows(self):
-        """(label, hint, widget) rows for the active tab; widget None = section header."""
         tab = self.seg_adv_tab.index
         if tab == 0:
             return [
@@ -247,6 +255,7 @@ class MenuScreen:
             ("Curiosity (exploration constant)", "Higher tries more unusual moves.", self.sl_c),
         ]
 
+    # Place the tabs and buttons of the Advanced options sheet.
     def _layout_advanced(self):
         card = self.adv_card
         self.seg_adv_tab.rect = pygame.Rect(card.x + 28, card.y + 72, card.width - 56, 42)
@@ -273,13 +282,16 @@ class MenuScreen:
             y += h
         return rows
 
+    # Show the Advanced options sheet.
     def _open_advanced(self) -> None:
         self.advanced_open = True
 
+    # Hide the Advanced options sheet and refresh the screen.
     def _close_advanced(self) -> None:
         self.advanced_open = False
         self._refresh()
 
+    # Put the advanced settings back to the recommended values.
     def _reset_advanced(self) -> None:
         tab = self.seg_adv_tab.index
         self._build_advanced(MatchSettings())
@@ -293,11 +305,12 @@ class MenuScreen:
             return f"{n1} 1", f"{n2} 2"
         return n1, n2
 
+    # Level name to save: 'Custom' when custom search settings are on.
     def _difficulty(self, algo_idx: int, difficulty: str) -> str:
         return DIFFICULTY_CUSTOM if self.override[ALGO_CONTROLLERS[algo_idx]] else difficulty
 
+    # Settings described by the screen, plus every problem found.
     def build_settings(self) -> Tuple[MatchSettings, List[str]]:
-        """Settings described by the screen, plus every problem found."""
         problems: List[str] = []
 
         sides = []
@@ -344,6 +357,7 @@ class MenuScreen:
         problems += self._friendly(settings.validate())
         return settings, problems
 
+    # Turn validation errors into short messages for the user.
     @staticmethod
     def _friendly(errors: List[str]) -> List[str]:
         out = []
@@ -358,6 +372,7 @@ class MenuScreen:
                 out.append(e)
         return list(dict.fromkeys(out))
 
+    # Update limits, hints and visible controls after any change.
     def _refresh(self) -> None:
         board = MIN_BOARD_SIZE + self.seg_board.index
         self.step_minlen.set_range(2, max(2, min(board, 8)))
@@ -372,15 +387,18 @@ class MenuScreen:
             inp.error = panel.is_human and (not inp.text.strip() or len(inp.text) > 16 or same_names)
         self.btn_start.enabled = not self.errors
 
+    # Settings from the form, or None if something is invalid.
     def get_current_settings(self) -> Optional[MatchSettings]:
         settings, self.errors = self.build_settings()
         return None if self.errors else settings
 
+    # Start the match if the settings are valid.
     def _handle_start_click(self) -> None:
         settings = self.get_current_settings()
         if settings is not None:
             self.on_start_match(settings)
 
+    # Start the AI benchmark with the current settings.
     def _handle_tournament_click(self) -> None:
         settings, _ = self.build_settings()
         self.on_start_tournament(settings)
@@ -394,11 +412,13 @@ class MenuScreen:
             widgets.append(stepper)
         return widgets + [self.btn_help, self.btn_advanced, self.btn_bench, self.btn_start]
 
+    # Name boxes that are visible now (none while the sheet is open).
     def _visible_inputs(self) -> List[TextInput]:
         if self.advanced_open:
             return []
         return [p.inp_name for p in self.panels if p.is_human]
 
+    # Pass input to the help card, the advanced sheet or the form.
     def handle_event(self, event: pygame.event.Event) -> None:
         if self.help.handle_event(event):
             return
@@ -440,6 +460,7 @@ class MenuScreen:
         for widget in self._main_widgets():
             widget.handle_event(event)
 
+    # Nothing to update each frame.
     def update(self) -> None:
         pass
 
@@ -474,6 +495,7 @@ class MenuScreen:
             self._render_advanced(surface)
         self.help.render(surface)
 
+    # Draw one player's panel.
     def _render_panel(self, surface: pygame.Surface, panel: _PlayerPanel) -> None:
         rect = panel.rect
         title = theme.draw_text(surface, f"Player {panel.pid}", theme.serif(22), col.TEXT, (rect.x + 20, rect.y - 4))
@@ -487,8 +509,8 @@ class MenuScreen:
             theme.draw_text(surface, self._level_summary(panel), theme.font(13), col.TEXT_SUBTLE,
                             (panel.seg_diff.rect.x, panel.seg_diff.rect.bottom + 6), max_width=COL_W)
 
+    # What the chosen level means for this algorithm (custom values when Advanced options override it).
     def _level_summary(self, panel: _PlayerPanel) -> str:
-        """What the chosen level means for this algorithm (custom values when Advanced options override it)."""
         custom = self.override[panel.controller]
         if panel.controller == CONTROLLER_MINIMAX:
             if custom:
@@ -509,11 +531,13 @@ class MenuScreen:
                     f"Moves explored: {'all' if explored == 0 else explored}")
         return ("Custom  ·  " + text) if custom else text
 
+    # Draw a caption above a control, then the control.
     @staticmethod
     def _render_field(surface: pygame.Surface, caption: str, widget) -> None:
         theme.draw_label(surface, caption, (widget.rect.x, widget.rect.y - 22))
         widget.render(surface)
 
+    # Draw the board size, end rule and first-player rows.
     def _render_match_form(self, surface: pygame.Surface) -> None:
         theme.draw_label(surface, "Match", (FORM_LABEL_X, RULE_Y + 16))
         rows = (("Board size", self.seg_board), ("Game ends", self.seg_length), ("First move", self.seg_first))
@@ -525,6 +549,7 @@ class MenuScreen:
         if stepper:
             stepper.render(surface)
 
+    # Draw the Advanced options sheet over a dimmed screen.
     def _render_advanced(self, surface: pygame.Surface) -> None:
         theme.draw_overlay(surface)
         card = self.adv_card

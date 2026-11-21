@@ -1,4 +1,4 @@
-"""Flat newspaper-puzzle palette: white paper, black ink, grey rules, one yellow and one green."""
+# Flat newspaper-puzzle palette: white paper, black ink, grey rules, one yellow and one green.
 
 import pygame
 
@@ -47,9 +47,11 @@ TILE_TEXT = C("#121213")
 OVERLAY = (18, 18, 19, 110)
 
 
+# Main colour of player 1 or 2.
 def player_color(pid: int) -> pygame.Color:
     return P1 if pid == 1 else P2
 
 
+# Light version of the player's colour.
 def player_soft(pid: int) -> pygame.Color:
     return P1_SOFT if pid == 1 else P2_SOFT

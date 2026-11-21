@@ -1,10 +1,9 @@
-"""Builds a one-click Windows executable: WordBattle.exe in the project root.
-
-The .exe contains Python, pygame, the dictionary and the images, so it runs on a computer without Python.
-
-    pip install pyinstaller
-    python scripts/build_exe.py
-"""
+# Builds a one-click Windows executable: WordBattle.exe in the project root.
+#
+# The .exe contains Python, pygame, the dictionary and the images, so it runs on a computer without Python.
+#
+#     pip install pyinstaller
+#     python scripts/build_exe.py
 
 import shutil
 import sys
@@ -21,11 +20,12 @@ DIST = ROOT / "dist"
 SEP = ";" if sys.platform == "win32" else ":"
 
 
+# --add-data argument: copy src to dest inside the bundle (paths match the source tree).
 def data(src: Path, dest: str) -> str:
-    """--add-data argument: copy src to dest inside the bundle (paths match the source tree)."""
     return f"--add-data={src}{SEP}{dest}"
 
 
+# Build WordBattle.exe with PyInstaller.
 def main() -> None:
     PyInstaller.__main__.run([
         str(ROOT / "main.py"),

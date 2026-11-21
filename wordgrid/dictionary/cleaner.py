@@ -80,14 +80,16 @@ PRESERVED_SINGULARS: Set[str] = {
 }
 
 
+# Preprocesses a raw English dictionary to filter out identifiable plurals.
 class DictionaryCleaner:
-    """Preprocesses a raw English dictionary to filter out identifiable plurals."""
 
+    # Store the raw words in upper case and load the plural helper.
     def __init__(self, raw_vocab: Optional[Set[str]] = None):
         self.raw_vocab: Set[str] = {w.upper() for w in raw_vocab} if raw_vocab else set()
         self._inflect_engine = None
         self._init_inflect()
 
+    # Load the inflect library if it is installed (used to find plurals).
     def _init_inflect(self):
         try:
             import inflect
@@ -95,12 +97,8 @@ class DictionaryCleaner:
         except ImportError:
             self._inflect_engine = None
 
+    # Determines if a word is an identifiable plural form.
     def is_plural(self, word: str, reference_vocab: Set[str]) -> Tuple[bool, str]:
-        """Determines if a word is an identifiable plural form.
-        
-        Returns:
-            (is_plural: bool, reason: str)
-        """
         w = word.upper()
 
         # 1. Explicit preserve list
@@ -172,16 +170,12 @@ class DictionaryCleaner:
 
         return False, "singular_default"
 
+    # Cleans raw words according to the plural exclusion policy.
     def clean_dictionary(
         self,
         raw_words: Set[str],
         min_word_length: int = 2,
     ) -> Tuple[Set[str], Dict[str, int]]:
-        """Cleans raw words according to the plural exclusion policy.
-        
-        Returns:
-            (accepted_words, statistics_dict)
-        """
         # Normalize and deduplicate
         normalized: Set[str] = {
             w.strip().upper()

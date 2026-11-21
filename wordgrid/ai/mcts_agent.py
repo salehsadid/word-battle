@@ -10,8 +10,8 @@ from wordgrid.ai.move_ordering import MoveOrdering
 from wordgrid.ai.explain import describe_move
 
 
+# A node in the Monte Carlo Tree Search tree.
 class MCTSNode:
-    """A node in the Monte Carlo Tree Search tree."""
 
     __slots__ = (
         "state",
@@ -23,6 +23,7 @@ class MCTSNode:
         "total_reward",
     )
 
+    # Create a tree node for a state, with zero visits and zero reward.
     def __init__(
         self,
         state: GameState,
@@ -38,13 +39,13 @@ class MCTSNode:
         self.visits: int = 0
         self.total_reward: float = 0.0
 
+    # Returns average reward from root player's perspective.
     @property
     def q_value(self) -> float:
-        """Returns average reward from root player's perspective."""
         return self.total_reward / self.visits if self.visits > 0 else 0.0
 
+    # Computes Upper Confidence Bound for Trees (UCT).
     def uct_value(self, c_param: float = 1.414) -> float:
-        """Computes Upper Confidence Bound for Trees (UCT)."""
         if self.visits == 0:
             return float("inf")
         parent_visits = self.parent.visits if self.parent else self.visits
@@ -52,30 +53,32 @@ class MCTSNode:
         exploration = c_param * math.sqrt(math.log(parent_visits) / self.visits)
         return exploitation + exploration
 
+    # True when every candidate move already has a child node.
     def is_fully_expanded(self) -> bool:
         return len(self.untried_moves) == 0
 
+    # True when the game is over in this node.
     def is_terminal(self) -> bool:
         return self.state.is_terminal
 
 
+# Monte Carlo Tree Search Agent using UCT selection, expansion, simulation, and backpropagation.
+#
+# Rewards are stored from the root player's perspective in [0, 1]. During selection, a node whose player to move is
+# the opponent picks the child maximising (1 - Q), so the tree models an opponent who plays to win rather than one who
+# cooperates.
+#
+# Configuration:
+#   simulations       - number of MCTS iterations per move.
+#   c_param           - UCT exploration constant.
+#   max_rollout_depth - plies simulated before the position is scored.
+#   max_children      - expand at most this many children per node, chosen by the shared
+#                       move ordering (0 = every legal move).
+#   time_limit        - optional cap in seconds (0 = none); stops iterating early.
+#   seed              - random seed for reproducible play (None = random).
 class MCTSAgent(BaseAgent):
-    """Monte Carlo Tree Search Agent using UCT selection, expansion, simulation, and backpropagation.
 
-    Rewards are stored from the root player's perspective in [0, 1]. During selection, a node
-    whose player to move is the opponent picks the child maximising (1 - Q), so the tree models
-    an opponent who plays to win rather than one who cooperates.
-
-    Configuration:
-      simulations       - number of MCTS iterations per move.
-      c_param           - UCT exploration constant.
-      max_rollout_depth - plies simulated before the position is scored.
-      max_children      - expand at most this many children per node, chosen by the shared
-                          move ordering (0 = every legal move).
-      time_limit        - optional cap in seconds (0 = none); stops iterating early.
-      seed              - random seed for reproducible play (None = random).
-    """
-
+    # Set the number of simulations, exploration constant, rollout length and seed.
     def __init__(
         self,
         name: str = "MCTS",
@@ -99,16 +102,18 @@ class MCTSAgent(BaseAgent):
         self.rng = random.Random(seed)
         self.move_orderer = MoveOrdering(self.rules.scoring)
 
+    # Use the match's rules and give the same scoring to move ordering.
     def bind_rules(self, rules: GameRules) -> None:
         super().bind_rules(rules)
         self.move_orderer.set_scoring(rules.scoring)
 
+    # Reset the random generator so a game can be repeated.
     def set_seed(self, seed: Optional[int]) -> None:
         self.seed = seed
         self.rng = random.Random(seed)
 
+    # Candidate moves for a node, most promising LAST (they are popped from the end).
     def _expansion_order(self, state: GameState, validator: WordValidatorProtocol) -> List[Move]:
-        """Candidate moves for a node, most promising LAST (they are popped from the end)."""
         legal = self.rules.get_legal_moves(state)
         if not legal:
             return []
@@ -120,6 +125,7 @@ class MCTSAgent(BaseAgent):
         ordered.reverse()
         return ordered
 
+    # Run the MCTS simulations and return the most visited move.
     def select_move(self, state: GameState, validator: WordValidatorProtocol) -> Move:
         start_time = time.perf_counter()
         legal_moves = self.rules.get_legal_moves(state)
@@ -190,10 +196,12 @@ class MCTSAgent(BaseAgent):
             self.last_stats["explanation"] = facts["summary"]
         return best_move
 
+    # Pick the child with the highest UCT value (1 - s/n on the opponent's turn).
     def _select_best_uct_child(self, node: MCTSNode, root_player: int) -> MCTSNode:
         mover = node.state.current_player  # player choosing among these children
         log_n = math.log(node.visits) if node.visits > 0 else 0.0
 
+        # UCT value of one child; untried children come first.
         def score(child: MCTSNode) -> float:
             if child.visits == 0:
                 return float("inf")
@@ -202,6 +210,7 @@ class MCTSAgent(BaseAgent):
 
         return max(node.children.values(), key=score)
 
+    # Add one untried move as a new child node and return it.
     def _expand(self, node: MCTSNode, validator: WordValidatorProtocol) -> MCTSNode:
         move = node.untried_moves.pop()
         next_state = self.rules.apply_move(node.state, move, validator)
@@ -214,13 +223,13 @@ class MCTSAgent(BaseAgent):
         node.children[move] = child
         return child
 
+    # Rollout with a light, randomised greedy policy on a private copy of the state.
     def _simulate(
         self,
         sim_state: GameState,
         root_player: int,
         validator: WordValidatorProtocol,
     ) -> float:
-        """Rollout with a light, randomised greedy policy on a private copy of the state."""
         curr = sim_state.clone()
         depth = 0
 
@@ -235,13 +244,12 @@ class MCTSAgent(BaseAgent):
         # Calculate reward from root_player's perspective in [0.0, 1.0]
         return self._compute_reward(curr, root_player)
 
+    # Samples a few empty cells; plays the best scoring letter there with probability 0.75, otherwise a random move.
     def _rollout_policy_choice(
         self,
         state: GameState,
         validator: WordValidatorProtocol,
     ) -> Optional[Move]:
-        """Samples a few empty cells; plays the best scoring letter there with probability 0.75,
-        otherwise a random move."""
         board = state.board
         empty = [
             (r, c)
@@ -272,14 +280,8 @@ class MCTSAgent(BaseAgent):
         r, c = self.rng.choice(sample)
         return (r, c, self.rng.choice(ALPHABET))
 
+    # Computes reward scaled between 0.0 and 1.0 from root_player's perspective.
     def _compute_reward(self, final_state: GameState, root_player: int) -> float:
-        """Computes reward scaled between 0.0 and 1.0 from root_player's perspective.
-        
-        Rewards:
-          - Win: [0.7, 1.0] depending on score margin
-          - Loss: [0.0, 0.3] depending on score margin
-          - Draw: ~0.5
-        """
         score_diff = final_state.get_score_difference(root_player)
         opponent = 2 if root_player == 1 else 1
 
@@ -296,6 +298,7 @@ class MCTSAgent(BaseAgent):
         reward = max(0.0, min(1.0, base + margin_bonus))
         return reward
 
+    # Add the reward to every node on the path back to the root.
     def _backpropagate(self, node: MCTSNode, reward: float) -> None:
         curr: Optional[MCTSNode] = node
         while curr is not None:

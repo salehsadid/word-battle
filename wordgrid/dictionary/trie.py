@@ -1,25 +1,27 @@
 from typing import Dict, List, Optional
 
 
+# A node in the prefix Trie.
 class TrieNode:
-    """A node in the prefix Trie."""
 
     __slots__ = ("children", "is_terminal")
 
+    # A node has child letters and a flag that marks the end of a word.
     def __init__(self):
         self.children: Dict[str, "TrieNode"] = {}
         self.is_terminal: bool = False
 
 
+# Prefix Trie for high-performance dictionary lookup and prefix testing.
 class Trie:
-    """Prefix Trie for high-performance dictionary lookup and prefix testing."""
 
+    # Start with an empty root node and no words.
     def __init__(self):
         self.root = TrieNode()
         self.word_count: int = 0
 
+    # Inserts an uppercase word into the Trie.
     def insert(self, word: str) -> None:
-        """Inserts an uppercase word into the Trie."""
         word = word.strip().upper()
         if not word:
             return
@@ -33,8 +35,8 @@ class Trie:
             node.is_terminal = True
             self.word_count += 1
 
+    # Checks if the exact word exists in the Trie in O(L) time.
     def is_word(self, word: str) -> bool:
-        """Checks if the exact word exists in the Trie in O(L) time."""
         word = word.strip().upper()
         if not word:
             return False
@@ -46,8 +48,8 @@ class Trie:
                 return False
         return node.is_terminal
 
+    # Checks if prefix exists in any word in the Trie in O(L) time.
     def is_prefix(self, prefix: str) -> bool:
-        """Checks if prefix exists in any word in the Trie in O(L) time."""
         prefix = prefix.strip().upper()
         if not prefix:
             return True
@@ -59,8 +61,8 @@ class Trie:
                 return False
         return True
 
+    # Finds words starting with prefix (useful for AI partial sequence analysis).
     def get_words_with_prefix(self, prefix: str, max_words: int = 50) -> List[str]:
-        """Finds words starting with prefix (useful for AI partial sequence analysis)."""
         prefix = prefix.strip().upper()
         node = self.root
         for char in prefix:
@@ -70,6 +72,7 @@ class Trie:
 
         results: List[str] = []
 
+        # Depth-first walk that collects words below this node.
         def _dfs(curr: TrieNode, current_str: List[str]):
             if len(results) >= max_words:
                 return
@@ -83,8 +86,10 @@ class Trie:
         _dfs(node, list(prefix))
         return results
 
+    # Number of words in the trie.
     def __len__(self) -> int:
         return self.word_count
 
+    # Allows `word in trie`.
     def __contains__(self, word: str) -> bool:
         return self.is_word(word)

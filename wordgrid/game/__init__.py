@@ -1,4 +1,4 @@
-"""Game package for WordGrid."""
+# Game package for WordGrid.
 
 from wordgrid.game.board import Board
 from wordgrid.game.state import GameState

@@ -1,9 +1,8 @@
-"""Generates wordgrid/assets/images/paper_background.png: newsprint paper with a faint crossword grid.
-
-The image is procedural (no stock photo), so it can be rebuilt or tweaked at any time:
-
-    python scripts/make_paper_background.py
-"""
+# Generates wordgrid/assets/images/paper_background.png: newsprint paper with a faint crossword grid.
+#
+# The image is procedural (no stock photo), so it can be rebuilt or tweaked at any time:
+#
+# python scripts/make_paper_background.py
 
 import os
 import random
@@ -26,8 +25,8 @@ LINE_ALPHA = 26            # grid lines (0-255)
 BLOCK_ALPHA = 20           # filled squares (0-255)
 
 
+# A 15 x 15 crossword grid with rotationally symmetric black squares, printed very faintly.
 def crossword(pick: random.Random) -> pygame.Surface:
-    """A 15 x 15 crossword grid with rotationally symmetric black squares, printed very faintly."""
     size = CELL * SQUARES + 2
     surf = pygame.Surface((size, size), pygame.SRCALPHA)
     for r in range(SQUARES):
@@ -41,8 +40,8 @@ def crossword(pick: random.Random) -> pygame.Surface:
     return surf
 
 
+# Low-frequency mottling: small random field scaled up smoothly.
 def smooth_noise(rng: np.random.Generator, scale: int, amplitude: float) -> np.ndarray:
-    """Low-frequency mottling: small random field scaled up smoothly."""
     small = rng.normal(0.0, 1.0, (H // scale + 2, W // scale + 2)).astype(np.float32)
     surf = pygame.surfarray.make_surface(np.repeat(((small - small.min()) / np.ptp(small) * 255).T[..., None], 3, 2))
     big = pygame.transform.smoothscale(surf, (W, H))
@@ -50,6 +49,7 @@ def smooth_noise(rng: np.random.Generator, scale: int, amplitude: float) -> np.n
     return (field - 0.5) * 2 * amplitude
 
 
+# Generate the paper-texture background image.
 def main() -> None:
     pygame.init()
     rng = np.random.default_rng(7)

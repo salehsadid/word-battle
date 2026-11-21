@@ -5,13 +5,13 @@ from wordgrid.game.scoring import ScoringSystem, WordValidatorProtocol, directio
 from wordgrid.config import GameConfig
 
 
+# Authoritative game coordinator for WordGrid.
+#
+# Serves as the single source of truth for match progress, move validation, scoring, and history tracking. Contains no
+# UI code.
 class GameEngine:
-    """Authoritative game coordinator for WordGrid.
 
-    Serves as the single source of truth for match progress, move validation,
-    scoring, and history tracking. Contains no UI code.
-    """
-
+    # Set up the dictionary, settings and rules, and start a new game.
     def __init__(
         self,
         validator: WordValidatorProtocol,
@@ -26,6 +26,7 @@ class GameEngine:
         self.move_log: List[dict] = []       # Every move, including zero-point moves
         self.state = self._create_initial_state()
 
+    # Empty board, scores 0-0, with the configured first player and end rule.
     def _create_initial_state(self) -> GameState:
         return GameState(
             board_size=self.config.board_size,
@@ -36,8 +37,8 @@ class GameEngine:
             move_limit=self.config.move_limit,
         )
 
+    # Resets the engine to a new game with the given or current configuration.
     def reset(self, config: Optional[GameConfig] = None) -> GameState:
-        """Resets the engine to a new game with the given or current configuration."""
         if config is not None:
             self.config = config
             self.rules = GameRules(scoring_system=ScoringSystem(self.config.min_word_length))
@@ -47,8 +48,8 @@ class GameEngine:
         self.state = self._create_initial_state()
         return self.state
 
+    # Validates and applies a move to the current match state.
     def make_move(self, move: Move) -> GameState:
-        """Validates and applies a move to the current match state."""
         if self.state.is_terminal:
             raise RuntimeError("Cannot make move in a finished game.")
 
@@ -90,8 +91,8 @@ class GameEngine:
 
         return self.state
 
+    # Rolls back the last move if available in history.
     def undo_last_move(self) -> Optional[GameState]:
-        """Rolls back the last move if available in history."""
         if not self.history:
             return None
         self.state = self.history.pop()
@@ -101,14 +102,16 @@ class GameEngine:
         self.move_log = [m for m in self.move_log if m["move_count"] <= self.state.move_count]
         return self.state
 
+    # Returns all legal moves for current state.
     def get_legal_moves(self) -> List[Move]:
-        """Returns all legal moves for current state."""
         return self.rules.get_legal_moves(self.state)
 
+    # True when the match has ended.
     @property
     def is_game_over(self) -> bool:
         return self.state.is_terminal
 
+    # Winning player (1 or 2), 0 for a draw, None while playing.
     @property
     def winner(self) -> Optional[int]:
         return self.state.winner
