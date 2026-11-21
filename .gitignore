@@ -65,7 +65,6 @@ data/raw_words.txt
 PROJECT_NOTES.md
 
 # One-click executable (built by scripts/build_exe.py)
-WordBattle.exe
 *.spec
 
 # Course deliverables kept out of git (report, gameplay video)
