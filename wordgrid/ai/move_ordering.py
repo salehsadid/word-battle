@@ -339,3 +339,7 @@ class MoveOrdering:
         if top_k > 0:
             return [m for _, m in scored_moves[:top_k]]
         return [m for _, m in scored_moves]
+
+##score = 0.1·centrality + 0.5·cell_best + 1.0·[has_neighbor]
+##      + 10·pts + 0.25·reach + 0.02·freq
+##      − 0.75·rank   (shudhu pts = 0 hole)
